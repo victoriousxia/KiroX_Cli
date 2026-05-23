@@ -18,16 +18,48 @@ type AppConfig struct {
 
 func HandleGetConfig(dataDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Read from saved .env file first, then fall back to env vars
+		saved := loadSavedEnv(filepath.Join(dataDir, ".env"))
+
 		cfg := AppConfig{
-			Proxy:      os.Getenv("PROXY"),
-			MoEmailURL: os.Getenv("MOEMAIL_BASE_URL"),
-			MoEmailKey: os.Getenv("MOEMAIL_API_KEY"),
+			Proxy:      saved["PROXY"],
+			MoEmailURL: saved["MOEMAIL_BASE_URL"],
+			MoEmailKey: saved["MOEMAIL_API_KEY"],
+		}
+		// Fall back to environment variables if not in saved file
+		if cfg.Proxy == "" {
+			cfg.Proxy = os.Getenv("PROXY")
+		}
+		if cfg.MoEmailURL == "" {
+			cfg.MoEmailURL = os.Getenv("MOEMAIL_BASE_URL")
+		}
+		if cfg.MoEmailKey == "" {
+			cfg.MoEmailKey = os.Getenv("MOEMAIL_API_KEY")
 		}
 		if cfg.MoEmailURL == "" {
 			cfg.MoEmailURL = "https://api.moemail.app"
 		}
 		c.JSON(http.StatusOK, gin.H{"config": cfg})
 	}
+}
+
+func loadSavedEnv(path string) map[string]string {
+	result := make(map[string]string)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return result
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			result[parts[0]] = parts[1]
+		}
+	}
+	return result
 }
 
 func HandleUpdateConfig(dataDir string) gin.HandlerFunc {
