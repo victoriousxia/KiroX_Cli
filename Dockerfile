@@ -21,8 +21,8 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=backend /app/kirox-server .
 RUN mkdir -p /app/data
-EXPOSE 8080
+EXPOSE 9527
 ENV DATA_DIR=/app/data
-ENV PORT=8080
+ENV PORT=9527
 ENV ADMIN_PASSWORD=admin
 ENTRYPOINT ["./kirox-server"]

@@ -5,7 +5,7 @@ services:
     build: .
     container_name: kirox-web
     ports:
-      - "8080:8080"
+      - "9527:9527"
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - MOEMAIL_BASE_URL=${MOEMAIL_BASE_URL:-https://api.moemail.app}
