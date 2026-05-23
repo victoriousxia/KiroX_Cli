@@ -8,9 +8,13 @@
       </template>
       <el-form :model="config" label-width="140px" label-position="left">
         <el-form-item label="代理地址">
-          <div style="display: flex; gap: 8px; width: 100%">
+          <div style="display: flex; gap: 8px; width: 100%; align-items: center">
+            <span class="proxy-dot" :class="proxyStatusClass"></span>
             <el-input v-model="config.proxy" placeholder="例如: socks5://127.0.0.1:20170" />
             <el-button :loading="testing" @click="handleTestProxy">检测代理</el-button>
+          </div>
+          <div v-if="proxyInfo" class="proxy-info" :class="proxyStatusClass">
+            {{ proxyInfo }}
           </div>
         </el-form-item>
         <el-form-item label="MoeMail API URL">
@@ -74,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getConfig, updateConfig, uploadOutlookCsv, type AppConfig, api } from '../api'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
@@ -91,6 +95,16 @@ const fileList = ref<UploadFile[]>([])
 const selectedFile = ref<File | null>(null)
 const outlookAccounts = ref<Array<{ email: string; clientId: string }>>([])
 const outlookCount = ref(0)
+
+// Proxy status: 'unknown' | 'ok' | 'fail'
+const proxyStatus = ref<'unknown' | 'ok' | 'fail'>('unknown')
+const proxyInfo = ref('')
+
+const proxyStatusClass = computed(() => {
+  if (proxyStatus.value === 'ok') return 'status-ok'
+  if (proxyStatus.value === 'fail') return 'status-fail'
+  return 'status-unknown'
+})
 
 async function loadConfig() {
   try {
@@ -111,11 +125,40 @@ async function loadOutlookAccounts() {
   }
 }
 
+async function handleTestProxy() {
+  if (!config.value.proxy) {
+    proxyStatus.value = 'fail'
+    proxyInfo.value = '未配置代理地址'
+    return
+  }
+  testing.value = true
+  try {
+    const res = await api.post('/api/config/test-proxy', { proxy: config.value.proxy })
+    const data = res.data
+    if (data.success) {
+      proxyStatus.value = 'ok'
+      proxyInfo.value = `IP: ${data.ip} | ${data.country} ${data.region} ${data.city} | ISP: ${data.isp} | 延迟: ${data.latency}ms`
+    } else {
+      proxyStatus.value = 'fail'
+      proxyInfo.value = data.error || '代理连接失败'
+    }
+  } catch (e: any) {
+    proxyStatus.value = 'fail'
+    proxyInfo.value = e.response?.data?.error || '检测失败'
+  } finally {
+    testing.value = false
+  }
+}
+
 async function handleSave() {
   saving.value = true
   try {
     await updateConfig(config.value)
     ElMessage.success('配置已保存')
+    // 保存后自动检测代理状态
+    if (config.value.proxy) {
+      await handleTestProxy()
+    }
   } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '保存失败')
   } finally {
@@ -125,23 +168,6 @@ async function handleSave() {
 
 function handleFileChange(file: UploadFile) {
   selectedFile.value = file.raw || null
-}
-
-async function handleTestProxy() {
-  testing.value = true
-  try {
-    const res = await api.post('/api/config/test-proxy', { proxy: config.value.proxy })
-    const data = res.data
-    if (data.success) {
-      ElMessage.success(`代理可用! IP: ${data.ip} [${data.country} ${data.region} ${data.city}] ISP: ${data.isp} 延迟: ${data.latency}ms`)
-    } else {
-      ElMessage.error(data.error || '代理连接失败')
-    }
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '检测失败')
-  } finally {
-    testing.value = false
-  }
 }
 
 async function handleUpload() {
@@ -163,9 +189,13 @@ async function handleUpload() {
   }
 }
 
-onMounted(() => {
-  loadConfig()
+onMounted(async () => {
+  await loadConfig()
   loadOutlookAccounts()
+  // 页面加载时自动检测代理状态
+  if (config.value.proxy) {
+    handleTestProxy()
+  }
 })
 </script>
 
@@ -197,5 +227,44 @@ onMounted(() => {
   color: #a0a0b0;
   font-size: 12px;
   margin-top: 8px;
+}
+
+.proxy-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.proxy-dot.status-ok {
+  background-color: #34d399;
+  box-shadow: 0 0 6px #34d399;
+}
+
+.proxy-dot.status-fail {
+  background-color: #f87171;
+  box-shadow: 0 0 6px #f87171;
+}
+
+.proxy-dot.status-unknown {
+  background-color: #6b7280;
+}
+
+.proxy-info {
+  font-size: 12px;
+  margin-top: 6px;
+  padding-left: 18px;
+}
+
+.proxy-info.status-ok {
+  color: #34d399;
+}
+
+.proxy-info.status-fail {
+  color: #f87171;
+}
+
+.proxy-info.status-unknown {
+  color: #6b7280;
 }
 </style>
