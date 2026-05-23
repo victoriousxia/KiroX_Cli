@@ -109,3 +109,35 @@ func HandleUploadOutlook(dataDir string) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "上传成功", "count": count})
 	}
 }
+
+func HandleGetOutlookAccounts(dataDir string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		csvPath := filepath.Join(dataDir, "outlook.csv")
+		data, err := os.ReadFile(csvPath)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"accounts": []interface{}{}, "count": 0})
+			return
+		}
+
+		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		type OutlookItem struct {
+			Email    string `json:"email"`
+			ClientID string `json:"clientId"`
+		}
+		var accounts []OutlookItem
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "----", 4)
+			if len(parts) == 4 {
+				accounts = append(accounts, OutlookItem{
+					Email:    parts[0],
+					ClientID: parts[2],
+				})
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"accounts": accounts, "count": len(accounts)})
+	}
+}

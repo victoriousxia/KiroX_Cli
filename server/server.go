@@ -59,6 +59,7 @@ func NewServer(dataDir string) *gin.Engine {
 		api.GET("/config", HandleGetConfig(dataDir))
 		api.POST("/config", HandleUpdateConfig(dataDir))
 		api.POST("/config/outlook", HandleUploadOutlook(dataDir))
+		api.GET("/config/outlook", HandleGetOutlookAccounts(dataDir))
 	}
 
 	// WebSocket endpoint
