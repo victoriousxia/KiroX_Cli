@@ -144,8 +144,17 @@ func (tm *TaskManager) runTask(task *Task) {
 
 	cfg := core.NewConfig()
 	cfg.Proxy = task.Config.Proxy
+	if cfg.Proxy == "" {
+		cfg.Proxy = os.Getenv("PROXY")
+	}
 	cfg.MoEmailBaseURL = task.Config.MoEmailURL
+	if cfg.MoEmailBaseURL == "" {
+		cfg.MoEmailBaseURL = os.Getenv("MOEMAIL_BASE_URL")
+	}
 	cfg.MoEmailAPIKey = task.Config.MoEmailKey
+	if cfg.MoEmailAPIKey == "" {
+		cfg.MoEmailAPIKey = os.Getenv("MOEMAIL_API_KEY")
+	}
 
 	var outlookAccounts []email.OutlookAccount
 	if task.Config.UseOutlook {
