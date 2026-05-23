@@ -8,6 +8,8 @@ require (
 	github.com/bogdanfinn/fhttp v0.6.8
 	github.com/bogdanfinn/tls-client v1.14.0
 	github.com/fxamacker/cbor/v2 v2.7.0
+	github.com/gin-gonic/gin v1.9.1
+	github.com/gorilla/websocket v1.5.1
 )
 
 require (

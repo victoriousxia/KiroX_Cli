@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+node_modules
+web/node_modules
+web/dist
+data/
+output/
+*.csv
+.env
+.DS_Store

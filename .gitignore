@@ -18,6 +18,7 @@ go.work.sum
 
 # Dependency directories
 vendor/
+node_modules/
 
 # Environment variables
 .env

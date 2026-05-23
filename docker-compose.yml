@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  kirox:
+    build: .
+    container_name: kirox-web
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - MOEMAIL_BASE_URL=${MOEMAIL_BASE_URL:-https://api.moemail.app}
+      - MOEMAIL_API_KEY=${MOEMAIL_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-kirox-production-secret}
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
