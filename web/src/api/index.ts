@@ -140,7 +140,7 @@ export async function getConfig(): Promise<AppConfig> {
 }
 
 export function updateConfig(config: AppConfig) {
-  return api.put('/api/config', config)
+  return api.post('/api/config', config)
 }
 
 export function uploadOutlookCsv(file: File) {
