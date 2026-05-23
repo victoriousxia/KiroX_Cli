@@ -29,7 +29,12 @@ let ws: WebSocket | null = null
 
 function formatTime(ts: string) {
   if (!ts) return ''
+  // Backend sends time as "15:04:05" format, use directly
+  if (/^\d{2}:\d{2}:\d{2}$/.test(ts)) {
+    return ts
+  }
   const d = new Date(ts)
+  if (isNaN(d.getTime())) return ts
   return d.toLocaleTimeString('zh-CN')
 }
 

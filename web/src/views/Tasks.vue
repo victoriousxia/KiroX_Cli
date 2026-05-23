@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { getTasks, getTaskDetail, stopTask, createTask, type Task, type TaskDetail, type TaskForm as TaskFormType } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -132,6 +132,7 @@ async function handleCreate(form: TaskFormType) {
     ElMessage.success('任务创建成功')
     showCreateDialog.value = false
     await loadTasks()
+    startAutoRefresh()
   } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '创建失败')
   }
@@ -146,6 +147,35 @@ async function viewTask(task: Task) {
   }
 }
 
+// Auto-refresh task list every 3 seconds when there are running tasks
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+function startAutoRefresh() {
+  if (refreshTimer) return
+  refreshTimer = setInterval(async () => {
+    await loadTasks()
+    // Also refresh current task detail if open
+    if (showDetail.value && currentTask.value) {
+      try {
+        currentTask.value = await getTaskDetail(currentTask.value.id)
+      } catch { /* ignore */ }
+    }
+    // Stop refreshing if no running tasks
+    const hasRunning = tasks.value.some(t => t.status === 'running')
+    if (!hasRunning && refreshTimer) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  }, 3000)
+}
+
+onMounted(() => {
+  loadTasks().then(() => {
+    const hasRunning = tasks.value.some(t => t.status === 'running')
+    if (hasRunning) startAutoRefresh()
+  })
+})
+
 async function handleStop(id: string) {
   try {
     await ElMessageBox.confirm('确定要停止该任务吗？', '确认', {
@@ -159,7 +189,12 @@ async function handleStop(id: string) {
   }
 }
 
-onMounted(loadTasks)
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+})
 </script>
 
 <style scoped>
