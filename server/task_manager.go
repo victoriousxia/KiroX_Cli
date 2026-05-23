@@ -3,8 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,11 +37,15 @@ type TaskConfig struct {
 
 type TaskResult struct {
 	Email        string  `json:"email"`
+	Password     string  `json:"password,omitempty"`
 	Status       string  `json:"status"`
 	Error        string  `json:"error,omitempty"`
 	Subscription string  `json:"subscription,omitempty"`
 	CreditUsed   float64 `json:"creditUsed,omitempty"`
 	CreditLimit  float64 `json:"creditLimit,omitempty"`
+	ClientID     string  `json:"clientId,omitempty"`
+	ClientSecret string  `json:"clientSecret,omitempty"`
+	RefreshToken string  `json:"refreshToken,omitempty"`
 }
 
 type Task struct {
@@ -215,7 +221,38 @@ func (tm *TaskManager) runTask(task *Task) {
 			}
 
 			reg := core.NewRegistrar(&taskCfg)
+
+			// Capture log output during registration and forward to WebSocket
+			logReader, logWriter := io.Pipe()
+			origOutput := log.Writer()
+			log.SetOutput(io.MultiWriter(origOutput, logWriter))
+
+			done := make(chan struct{})
+			go func() {
+				buf := make([]byte, 4096)
+				for {
+					n, err := logReader.Read(buf)
+					if n > 0 {
+						lines := strings.Split(strings.TrimSpace(string(buf[:n])), "\n")
+						for _, line := range lines {
+							line = strings.TrimSpace(line)
+							if line != "" {
+								tm.logHub.Send(task.ID, line)
+							}
+						}
+					}
+					if err != nil {
+						break
+					}
+				}
+				close(done)
+			}()
+
 			result := reg.Run()
+
+			log.SetOutput(origOutput)
+			logWriter.Close()
+			<-done
 
 			errStr, _ := result["error"].(string)
 			if errStr == "邮箱已注册过，跳过" {
@@ -234,6 +271,12 @@ func (tm *TaskManager) runTask(task *Task) {
 			}
 			if result["status"] == "success" {
 				task.Success++
+				tr.Password, _ = result["password"].(string)
+				tr.ClientID, _ = result["client_id"].(string)
+				tr.ClientSecret, _ = result["client_secret"].(string)
+				if at, ok := result["aws_token"].(map[string]interface{}); ok {
+					tr.RefreshToken, _ = at["refreshToken"].(string)
+				}
 				if v, ok := result["verify"].(map[string]interface{}); ok {
 					tr.Subscription, _ = v["subscription"].(string)
 					tr.CreditUsed, _ = v["credit_used"].(float64)
@@ -338,6 +381,10 @@ func (tm *TaskManager) persistResults(task *Task) {
 		if r.Status == "success" && !seen[r.Email] {
 			existing = append(existing, map[string]interface{}{
 				"email":        r.Email,
+				"password":     r.Password,
+				"refreshToken": r.RefreshToken,
+				"clientId":     r.ClientID,
+				"clientSecret": r.ClientSecret,
 				"subscription": r.Subscription,
 				"creditUsed":   r.CreditUsed,
 				"creditLimit":  r.CreditLimit,
