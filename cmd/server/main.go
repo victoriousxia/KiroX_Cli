@@ -21,5 +21,5 @@ func main() {
 
 	r := server.NewServer(dataDir)
 	log.Printf("KiroX Web UI running on :%s", port)
-	r.Run(":" + port)
+	log.Fatal(r.Run(":" + port))
 }

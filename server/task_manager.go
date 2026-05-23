@@ -54,15 +54,19 @@ type Task struct {
 	StartedAt string       `json:"startedAt,omitempty"`
 	EndedAt   string       `json:"endedAt,omitempty"`
 
-	stopCh chan struct{}
-	mu     sync.Mutex
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	mu       sync.Mutex
 }
 
+var taskCounter int64
+
 type TaskManager struct {
-	tasks   map[string]*Task
-	mu      sync.RWMutex
-	logHub  *LogHub
-	dataDir string
+	tasks    map[string]*Task
+	mu       sync.RWMutex
+	logHub   *LogHub
+	dataDir  string
+	fileMu   sync.Mutex
 }
 
 func NewTaskManager(logHub *LogHub, dataDir string) *TaskManager {
@@ -74,7 +78,8 @@ func NewTaskManager(logHub *LogHub, dataDir string) *TaskManager {
 }
 
 func (tm *TaskManager) CreateTask(cfg TaskConfig) *Task {
-	id := fmt.Sprintf("task-%d", time.Now().UnixMilli())
+	seq := atomic.AddInt64(&taskCounter, 1)
+	id := fmt.Sprintf("task-%d-%d", time.Now().UnixMilli(), seq)
 	task := &Task{
 		ID:        id,
 		Status:    TaskPending,
@@ -110,14 +115,18 @@ func (tm *TaskManager) StopTask(id string) bool {
 	tm.mu.RLock()
 	task := tm.tasks[id]
 	tm.mu.RUnlock()
-	if task == nil || task.Status != TaskRunning {
+	if task == nil {
 		return false
 	}
-	close(task.stopCh)
 	task.mu.Lock()
+	if task.Status != TaskRunning {
+		task.mu.Unlock()
+		return false
+	}
 	task.Status = TaskStopped
 	task.EndedAt = time.Now().Format("2006-01-02 15:04:05")
 	task.mu.Unlock()
+	task.stopOnce.Do(func() { close(task.stopCh) })
 	return true
 }
 
@@ -300,6 +309,9 @@ func (tm *TaskManager) persistResults(task *Task) {
 	copy(results, task.Results)
 	task.mu.Unlock()
 
+	tm.fileMu.Lock()
+	defer tm.fileMu.Unlock()
+
 	path := tm.dataDir + "/results.json"
 	var existing []map[string]interface{}
 	if data, err := os.ReadFile(path); err == nil {
@@ -332,6 +344,9 @@ func (tm *TaskManager) persistResults(task *Task) {
 }
 
 func (tm *TaskManager) GetAllResults() []map[string]interface{} {
+	tm.fileMu.Lock()
+	defer tm.fileMu.Unlock()
+
 	path := tm.dataDir + "/results.json"
 	data, err := os.ReadFile(path)
 	if err != nil {

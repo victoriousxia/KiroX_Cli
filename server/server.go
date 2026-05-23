@@ -70,8 +70,8 @@ func NewServer(dataDir string) *gin.Engine {
 		}
 		defer conn.Close()
 
-		logHub.Subscribe(taskID, conn)
-		defer logHub.Unsubscribe(taskID, conn)
+		entry := logHub.Subscribe(taskID, conn)
+		defer logHub.Unsubscribe(taskID, entry)
 
 		for {
 			_, _, err := conn.ReadMessage()

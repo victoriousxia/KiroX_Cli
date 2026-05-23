@@ -101,7 +101,7 @@ func validateJWT(token string) bool {
 
 	sigInput := parts[0] + "." + parts[1]
 	expectedSig := signHMAC(sigInput)
-	if parts[2] != expectedSig {
+	if !hmac.Equal([]byte(parts[2]), []byte(expectedSig)) {
 		return false
 	}
 
