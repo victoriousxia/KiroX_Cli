@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -90,6 +91,21 @@ func HandleUploadOutlook(dataDir string) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"message": "outlook.csv uploaded", "path": savePath})
+		// Count valid accounts
+		data, _ := os.ReadFile(savePath)
+		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		count := 0
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "----", 4)
+			if len(parts) == 4 {
+				count++
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "上传成功", "count": count})
 	}
 }

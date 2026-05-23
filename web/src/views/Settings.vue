@@ -31,7 +31,7 @@
       <el-upload
         :auto-upload="false"
         :on-change="handleFileChange"
-        accept=".csv"
+        accept=".csv,.txt"
         :limit="1"
         :file-list="fileList"
       >
@@ -47,7 +47,7 @@
           上传
         </el-button>
         <template #tip>
-          <div class="upload-tip">请上传 Outlook 账户 CSV 文件</div>
+          <div class="upload-tip">支持 .csv 或 .txt 文件，格式：邮箱----密码----客户端ID----RefreshToken</div>
         </template>
       </el-upload>
     </el-card>
