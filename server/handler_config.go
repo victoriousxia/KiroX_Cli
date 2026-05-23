@@ -1,13 +1,16 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	httputil "reg_go/internal/http"
 )
 
 type AppConfig struct {
@@ -171,5 +174,70 @@ func HandleGetOutlookAccounts(dataDir string) gin.HandlerFunc {
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{"accounts": accounts, "count": len(accounts)})
+	}
+}
+
+func HandleTestProxy(dataDir string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Proxy string `json:"proxy"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		proxy := req.Proxy
+		if proxy == "" {
+			saved := loadSavedEnv(filepath.Join(dataDir, ".env"))
+			proxy = saved["PROXY"]
+		}
+		if proxy == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未配置代理地址"})
+			return
+		}
+
+		client := httputil.NewTLSClient(proxy, true, "137")
+
+		start := time.Now()
+		httpReq, _ := http.NewRequest("GET", "https://api.ip.sb/geoip", nil)
+		httpReq.Header.Set("User-Agent", "Mozilla/5.0")
+		resp, err := client.Do(httpReq)
+		elapsed := time.Since(start).Milliseconds()
+
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"error":   "代理连接失败: " + err.Error(),
+				"proxy":   proxy,
+			})
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+
+		var geoData map[string]interface{}
+		json.Unmarshal(body, &geoData)
+
+		ip, _ := geoData["ip"].(string)
+		country, _ := geoData["country"].(string)
+		region, _ := geoData["region"].(string)
+		city, _ := geoData["city"].(string)
+		isp, _ := geoData["isp"].(string)
+		org, _ := geoData["organization"].(string)
+		if isp == "" {
+			isp = org
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"proxy":   proxy,
+			"ip":      ip,
+			"country": country,
+			"region":  region,
+			"city":    city,
+			"isp":     isp,
+			"latency": elapsed,
+		})
 	}
 }

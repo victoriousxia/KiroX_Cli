@@ -8,7 +8,10 @@
       </template>
       <el-form :model="config" label-width="140px" label-position="left">
         <el-form-item label="代理地址">
-          <el-input v-model="config.proxy" placeholder="例如: socks5://127.0.0.1:20170" />
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input v-model="config.proxy" placeholder="例如: socks5://127.0.0.1:20170" />
+            <el-button :loading="testing" @click="handleTestProxy">检测代理</el-button>
+          </div>
         </el-form-item>
         <el-form-item label="MoeMail API URL">
           <el-input v-model="config.moEmailUrl" placeholder="MoeMail 服务地址" />
@@ -83,6 +86,7 @@ const config = ref<AppConfig>({
 })
 const saving = ref(false)
 const uploading = ref(false)
+const testing = ref(false)
 const fileList = ref<UploadFile[]>([])
 const selectedFile = ref<File | null>(null)
 const outlookAccounts = ref<Array<{ email: string; clientId: string }>>([])
@@ -121,6 +125,23 @@ async function handleSave() {
 
 function handleFileChange(file: UploadFile) {
   selectedFile.value = file.raw || null
+}
+
+async function handleTestProxy() {
+  testing.value = true
+  try {
+    const res = await api.post('/api/config/test-proxy', { proxy: config.value.proxy })
+    const data = res.data
+    if (data.success) {
+      ElMessage.success(`代理可用! IP: ${data.ip} [${data.country} ${data.region} ${data.city}] ISP: ${data.isp} 延迟: ${data.latency}ms`)
+    } else {
+      ElMessage.error(data.error || '代理连接失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.error || '检测失败')
+  } finally {
+    testing.value = false
+  }
 }
 
 async function handleUpload() {
