@@ -269,7 +269,9 @@ func (tm *TaskManager) runTask(task *Task) {
 				Email:  fmt.Sprintf("%v", result["email"]),
 				Status: fmt.Sprintf("%v", result["status"]),
 			}
-			if result["status"] == "success" {
+
+			statusVal, _ := result["status"].(string)
+			if statusVal == "success" {
 				task.Success++
 				tr.Password, _ = result["password"].(string)
 				tr.ClientID, _ = result["client_id"].(string)
@@ -282,14 +284,14 @@ func (tm *TaskManager) runTask(task *Task) {
 					tr.CreditUsed, _ = v["credit_used"].(float64)
 					tr.CreditLimit, _ = v["credit_limit"].(float64)
 				}
-				sendLog("[%d/%d] %s 成功", num+1, task.Total, tr.Email)
+				sendLog("[%d/%d] %s 注册成功!", num+1, task.Total, tr.Email)
 			} else {
 				task.Failed++
 				tr.Error = errStr
 				if len(tr.Error) > 100 {
 					tr.Error = tr.Error[:100]
 				}
-				sendLog("[%d/%d] %s 失败: %s", num+1, task.Total, tr.Email, tr.Error)
+				sendLog("[%d/%d] %s 失败: %s (status=%v)", num+1, task.Total, tr.Email, tr.Error, result["status"])
 			}
 			task.Results = append(task.Results, tr)
 			task.mu.Unlock()
