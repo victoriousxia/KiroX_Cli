@@ -468,6 +468,24 @@ func (tm *TaskManager) GetAllResults() []map[string]interface{} {
 	}
 	var results []map[string]interface{}
 	json.Unmarshal(data, &results)
+
+	csvPath := tm.dataDir + "/outlook.csv"
+	if accounts, err := email.ParseOutlookCSV(csvPath); err == nil && len(accounts) > 0 {
+		lookup := make(map[string]string, len(accounts))
+		for _, acc := range accounts {
+			lookup[acc.Email] = acc.Password
+		}
+		for i, r := range results {
+			if _, has := r["emailPassword"]; !has {
+				if em, ok := r["email"].(string); ok {
+					if pass, found := lookup[em]; found {
+						results[i]["emailPassword"] = pass
+					}
+				}
+			}
+		}
+	}
+
 	return results
 }
 
