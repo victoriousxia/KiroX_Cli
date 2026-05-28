@@ -267,9 +267,9 @@ func (tm *TaskManager) runTask(task *Task) {
 
 			task.mu.Lock()
 			tr := TaskResult{
-				Email:  fmt.Sprintf("%v", result["email"]),
 				Status: fmt.Sprintf("%v", result["status"]),
 			}
+			tr.Email, _ = result["email"].(string)
 
 			statusVal, _ := result["status"].(string)
 			if statusVal == "success" {
@@ -498,5 +498,8 @@ func (tm *TaskManager) removeAccountFromCSV(csvPath, emailAddr string) {
 			newLines = append(newLines, line)
 		}
 	}
-	os.WriteFile(csvPath, []byte(strings.Join(newLines, "\n")), 0644)
+	content := strings.Join(newLines, "\n") + "\n"
+	if err := os.WriteFile(csvPath, []byte(content), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "[removeCSV] 写入失败: %v\n", err)
+	}
 }
