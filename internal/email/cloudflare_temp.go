@@ -195,21 +195,25 @@ func (c *CloudflareEmailProvider) fetchCode() (string, error) {
 		return "", nil
 	}
 
-	latest := result.Results[0]
-	log.Printf("[CfEmail] 收到邮件: id=%d, source=%s, subject=%s, message_len=%d", latest.ID, latest.Source, latest.Subject, len(latest.Message))
-	text := latest.Subject + " " + latest.Message
-	if code := ExtractCode(text); code != "" {
-		return code, nil
+	for _, mail := range result.Results {
+		log.Printf("[CfEmail] 收到邮件: id=%d, source=%s, subject=%s, message_len=%d", mail.ID, mail.Source, mail.Subject, len(mail.Message))
+
+		text := mail.Subject + " " + mail.Message
+		if code := ExtractCode(text); code != "" {
+			return code, nil
+		}
+
+		detail, err := c.fetchMailDetail(mail.ID)
+		if err != nil {
+			log.Printf("[CfEmail] 获取邮件详情失败 id=%d: %v", mail.ID, err)
+			continue
+		}
+		if code := ExtractCode(detail); code != "" {
+			log.Printf("[CfEmail] 从邮件详情提取到验证码 id=%d", mail.ID)
+			return code, nil
+		}
 	}
 
-	// 列表接口可能不含完整邮件内容，尝试获取单封邮件详情
-	detail, err := c.fetchMailDetail(latest.ID)
-	if err != nil {
-		return "", nil
-	}
-	if code := ExtractCode(detail); code != "" {
-		return code, nil
-	}
 	return "", nil
 }
 
@@ -230,8 +234,10 @@ func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
+
+	log.Printf("[CfEmail] 邮件详情 id=%d: body_len=%d, body_preview=%.200s", mailID, len(body), string(body))
 
 	var detail struct {
 		Raw     string `json:"raw"`
@@ -248,10 +254,10 @@ func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
 
 	// 尝试所有可能的内容字段
 	candidates := []string{detail.Raw, detail.Message, detail.HTML, detail.Text, detail.Content}
-	for _, c := range candidates {
-		if c != "" {
-			if code := ExtractCode(c); code != "" {
-				return c, nil
+	for _, candidate := range candidates {
+		if candidate != "" {
+			if code := ExtractCode(candidate); code != "" {
+				return candidate, nil
 			}
 		}
 	}
