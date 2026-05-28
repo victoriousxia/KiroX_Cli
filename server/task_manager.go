@@ -189,8 +189,9 @@ func (tm *TaskManager) runTask(task *Task) {
 	cfg.EmailMode = emailMode
 
 	var outlookAccounts []email.OutlookAccount
+	var csvPath string
 	if emailMode == "outlook" {
-		csvPath := task.Config.OutlookCSV
+		csvPath = task.Config.OutlookCSV
 		if csvPath == "" {
 			csvPath = tm.dataDir + "/outlook.csv"
 		}
@@ -257,6 +258,10 @@ func (tm *TaskManager) runTask(task *Task) {
 					emailAddr = acc.Email
 				}
 				sendLog("[%d/%d] %s 已注册，跳过", num+1, task.Total, emailAddr)
+				if emailMode == "outlook" && csvPath != "" && emailAddr != "" {
+					tm.removeAccountFromCSV(csvPath, emailAddr)
+					sendLog("[%d/%d] %s 已从账号池移除 (已注册)", num+1, task.Total, emailAddr)
+				}
 				continue
 			}
 
@@ -289,8 +294,20 @@ func (tm *TaskManager) runTask(task *Task) {
 
 			if statusVal == "success" {
 				sendLog("[%d/%d] %s 注册成功!", num+1, task.Total, tr.Email)
+				if emailMode == "outlook" && csvPath != "" && tr.Email != "" {
+					tm.removeAccountFromCSV(csvPath, tr.Email)
+					sendLog("[%d/%d] %s 已从账号池移除 (注册成功)", num+1, task.Total, tr.Email)
+				}
 			} else {
 				sendLog("[%d/%d] %s 失败: %s (status=%v)", num+1, task.Total, tr.Email, tr.Error, result["status"])
+				if emailMode == "outlook" && csvPath != "" && tr.Email != "" {
+					if !isTransientError(tr.Error) {
+						tm.removeAccountFromCSV(csvPath, tr.Email)
+						sendLog("[%d/%d] %s 已从账号池移除 (不可恢复错误)", num+1, task.Total, tr.Email)
+					} else {
+						sendLog("[%d/%d] %s 保留在账号池 (网络临时错误，可重试)", num+1, task.Total, tr.Email)
+					}
+				}
 			}
 			tm.persistResults(task)
 			return
@@ -444,4 +461,42 @@ func (tm *TaskManager) GetAllResults() []map[string]interface{} {
 	var results []map[string]interface{}
 	json.Unmarshal(data, &results)
 	return results
+}
+
+func isTransientError(errStr string) bool {
+	transient := []string{
+		"EOF", "timeout", "context deadline",
+		"connection refused", "dial tcp", "TLS handshake",
+		"connection reset", "no such host",
+		"等待验证码超时",
+	}
+	lower := strings.ToLower(errStr)
+	for _, t := range transient {
+		if strings.Contains(lower, strings.ToLower(t)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (tm *TaskManager) removeAccountFromCSV(csvPath, emailAddr string) {
+	tm.fileMu.Lock()
+	defer tm.fileMu.Unlock()
+
+	data, err := os.ReadFile(csvPath)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	var newLines []string
+	for _, line := range lines {
+		trimLine := strings.TrimSpace(line)
+		if trimLine == "" {
+			continue
+		}
+		if !strings.HasPrefix(trimLine, emailAddr+"----") {
+			newLines = append(newLines, line)
+		}
+	}
+	os.WriteFile(csvPath, []byte(strings.Join(newLines, "\n")), 0644)
 }
