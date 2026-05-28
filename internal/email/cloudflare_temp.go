@@ -2,11 +2,17 @@ package email
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
+	"mime"
+	"mime/multipart"
+	"mime/quotedprintable"
+	"net/mail"
+	"strings"
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -184,6 +190,7 @@ func (c *CloudflareEmailProvider) fetchCode() (string, error) {
 			Source  string `json:"source"`
 			Subject string `json:"subject"`
 			Message string `json:"message"`
+			Raw     string `json:"raw"`
 		} `json:"results"`
 		Count int `json:"count"`
 	}
@@ -195,21 +202,36 @@ func (c *CloudflareEmailProvider) fetchCode() (string, error) {
 		return "", nil
 	}
 
-	for _, mail := range result.Results {
-		log.Printf("[CfEmail] 收到邮件: id=%d, source=%s, subject=%s, message_len=%d", mail.ID, mail.Source, mail.Subject, len(mail.Message))
+	for _, m := range result.Results {
+		log.Printf("[CfEmail] 收到邮件: id=%d, source=%s, subject=%s, message_len=%d, raw_len=%d",
+			m.ID, m.Source, m.Subject, len(m.Message), len(m.Raw))
 
-		text := mail.Subject + " " + mail.Message
+		// 先尝试从列表字段直接提取
+		text := m.Subject + " " + m.Message
 		if code := ExtractCode(text); code != "" {
 			return code, nil
 		}
 
-		detail, err := c.fetchMailDetail(mail.ID)
+		// 尝试从列表中的 raw 字段解析 MIME 提取
+		if m.Raw != "" {
+			if code := extractCodeFromRaw(m.Raw); code != "" {
+				log.Printf("[CfEmail] 从列表 raw 字段提取到验证码 id=%d", m.ID)
+				return code, nil
+			}
+		}
+
+		// 请求单封邮件详情 (parsed_mail 端点返回已解析内容)
+		detail, err := c.fetchParsedMail(m.ID)
 		if err != nil {
-			log.Printf("[CfEmail] 获取邮件详情失败 id=%d: %v", mail.ID, err)
-			continue
+			log.Printf("[CfEmail] parsed_mail 失败 id=%d: %v, 尝试 raw 端点", m.ID, err)
+			detail, err = c.fetchRawMail(m.ID)
+			if err != nil {
+				log.Printf("[CfEmail] raw mail 也失败 id=%d: %v", m.ID, err)
+				continue
+			}
 		}
 		if code := ExtractCode(detail); code != "" {
-			log.Printf("[CfEmail] 从邮件详情提取到验证码 id=%d", mail.ID)
+			log.Printf("[CfEmail] 从邮件详情提取到验证码 id=%d", m.ID)
 			return code, nil
 		}
 	}
@@ -217,8 +239,9 @@ func (c *CloudflareEmailProvider) fetchCode() (string, error) {
 	return "", nil
 }
 
-func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
-	url := fmt.Sprintf("%s/api/mails/%d", c.baseURL, mailID)
+// fetchParsedMail 获取已解析的邮件内容 (/api/parsed_mail/:id)
+func (c *CloudflareEmailProvider) fetchParsedMail(mailID int) (string, error) {
+	url := fmt.Sprintf("%s/api/parsed_mail/%d", c.baseURL, mailID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -237,7 +260,48 @@ func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	log.Printf("[CfEmail] 邮件详情 id=%d: body_len=%d, body_preview=%.200s", mailID, len(body), string(body))
+	var detail struct {
+		Subject string `json:"subject"`
+		Text    string `json:"text"`
+		HTML    string `json:"html"`
+		Message string `json:"message"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(body, &detail); err != nil {
+		return string(body), nil
+	}
+
+	candidates := []string{detail.Text, detail.HTML, detail.Message, detail.Content, detail.Subject}
+	for _, candidate := range candidates {
+		if candidate != "" {
+			if code := ExtractCode(candidate); code != "" {
+				return candidate, nil
+			}
+		}
+	}
+	return detail.Subject + " " + detail.Text + " " + detail.HTML + " " + detail.Message + " " + detail.Content, nil
+}
+
+// fetchRawMail 获取原始邮件内容 (/api/mail/:id 单数)
+func (c *CloudflareEmailProvider) fetchRawMail(mailID int) (string, error) {
+	url := fmt.Sprintf("%s/api/mail/%d", c.baseURL, mailID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.jwt)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
 
 	var detail struct {
 		Raw     string `json:"raw"`
@@ -248,12 +312,21 @@ func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
 		Subject string `json:"subject"`
 	}
 	if err := json.Unmarshal(body, &detail); err != nil {
-		// 可能直接返回纯文本
-		return string(body), nil
+		return extractTextFromMIME(string(body)), nil
 	}
 
-	// 尝试所有可能的内容字段
-	candidates := []string{detail.Raw, detail.Message, detail.HTML, detail.Text, detail.Content}
+	// 如果有 raw 字段，解析 MIME
+	if detail.Raw != "" {
+		if code := extractCodeFromRaw(detail.Raw); code != "" {
+			return detail.Raw, nil
+		}
+		parsed := extractTextFromMIME(detail.Raw)
+		if code := ExtractCode(parsed); code != "" {
+			return parsed, nil
+		}
+	}
+
+	candidates := []string{detail.Text, detail.HTML, detail.Message, detail.Content}
 	for _, candidate := range candidates {
 		if candidate != "" {
 			if code := ExtractCode(candidate); code != "" {
@@ -261,8 +334,110 @@ func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
 			}
 		}
 	}
-	// 返回所有内容拼接，让上层再尝试提取
-	return detail.Subject + " " + detail.Raw + " " + detail.Message + " " + detail.HTML + " " + detail.Text + " " + detail.Content, nil
+	return detail.Subject + " " + detail.Raw + " " + detail.Text + " " + detail.HTML + " " + detail.Message + " " + detail.Content, nil
+}
+
+// extractCodeFromRaw 从原始 MIME 邮件中提取验证码
+func extractCodeFromRaw(raw string) string {
+	if code := ExtractCode(raw); code != "" {
+		return code
+	}
+	text := extractTextFromMIME(raw)
+	if text != "" {
+		if code := ExtractCode(text); code != "" {
+			return code
+		}
+	}
+	return ""
+}
+
+// extractTextFromMIME 解析 MIME 邮件，提取文本内容
+func extractTextFromMIME(raw string) string {
+	msg, err := mail.ReadMessage(strings.NewReader(raw))
+	if err != nil {
+		if decoded, decErr := base64.StdEncoding.DecodeString(strings.TrimSpace(raw)); decErr == nil {
+			return string(decoded)
+		}
+		return raw
+	}
+
+	contentType := msg.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		body, _ := io.ReadAll(msg.Body)
+		return decodeBody(string(body), msg.Header.Get("Content-Transfer-Encoding"))
+	}
+
+	if strings.HasPrefix(mediaType, "multipart/") {
+		return parseMultipart(msg.Body, params["boundary"])
+	}
+
+	body, _ := io.ReadAll(msg.Body)
+	return decodeBody(string(body), msg.Header.Get("Content-Transfer-Encoding"))
+}
+
+func parseMultipart(r io.Reader, boundary string) string {
+	if boundary == "" {
+		body, _ := io.ReadAll(r)
+		return string(body)
+	}
+
+	mr := multipart.NewReader(r, boundary)
+	var texts []string
+
+	for {
+		part, err := mr.NextPart()
+		if err != nil {
+			break
+		}
+
+		partType := part.Header.Get("Content-Type")
+		partEncoding := part.Header.Get("Content-Transfer-Encoding")
+		partBody, _ := io.ReadAll(part)
+		decoded := decodeBody(string(partBody), partEncoding)
+
+		if strings.Contains(partType, "text/plain") || strings.Contains(partType, "text/html") {
+			texts = append(texts, decoded)
+		} else if strings.HasPrefix(partType, "multipart/") {
+			_, innerParams, _ := mime.ParseMediaType(partType)
+			inner := parseMultipart(strings.NewReader(decoded), innerParams["boundary"])
+			if inner != "" {
+				texts = append(texts, inner)
+			}
+		}
+	}
+
+	return strings.Join(texts, " ")
+}
+
+func decodeBody(body, encoding string) string {
+	encoding = strings.ToLower(strings.TrimSpace(encoding))
+	switch encoding {
+	case "base64":
+		cleaned := strings.ReplaceAll(body, "\r\n", "")
+		cleaned = strings.ReplaceAll(cleaned, "\n", "")
+		decoded, err := base64.StdEncoding.DecodeString(cleaned)
+		if err != nil {
+			decoded, err = base64.RawStdEncoding.DecodeString(cleaned)
+			if err != nil {
+				return body
+			}
+		}
+		return string(decoded)
+	case "quoted-printable":
+		reader := quotedprintable.NewReader(strings.NewReader(body))
+		decoded, err := io.ReadAll(reader)
+		if err != nil {
+			return body
+		}
+		return string(decoded)
+	default:
+		return body
+	}
 }
 
 func randomName(length int) string {
