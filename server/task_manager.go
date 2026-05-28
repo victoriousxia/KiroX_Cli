@@ -29,10 +29,12 @@ type TaskConfig struct {
 	Concurrency int    `json:"concurrency"`
 	Delay       int    `json:"delay"`
 	Proxy       string `json:"proxy"`
-	UseOutlook  bool   `json:"useOutlook"`
+	EmailMode   string `json:"emailMode"`
 	OutlookCSV  string `json:"outlookCsv"`
 	MoEmailURL  string `json:"moEmailUrl"`
 	MoEmailKey  string `json:"moEmailKey"`
+	CfEmailURL  string `json:"cfEmailUrl"`
+	CfEmailAuth string `json:"cfEmailAuth"`
 }
 
 type TaskResult struct {
@@ -48,11 +50,17 @@ type TaskResult struct {
 	RefreshToken string  `json:"refreshToken,omitempty"`
 }
 
+type TaskLog struct {
+	Message   string `json:"message"`
+	Timestamp string `json:"timestamp"`
+}
+
 type Task struct {
 	ID        string       `json:"id"`
 	Status    TaskStatus   `json:"status"`
 	Config    TaskConfig   `json:"config"`
 	Results   []TaskResult `json:"results"`
+	Logs      []TaskLog    `json:"logs,omitempty"`
 	Success   int          `json:"success"`
 	Failed    int          `json:"failed"`
 	Total     int          `json:"total"`
@@ -144,8 +152,12 @@ func (tm *TaskManager) runTask(task *Task) {
 
 	sendLog := func(format string, args ...interface{}) {
 		msg := fmt.Sprintf(format, args...)
-		log.Printf("[%s] %s", task.ID, msg)
+		ts := time.Now().Format("15:04:05")
+		fmt.Fprintf(os.Stderr, "[%s] [%s] %s\n", ts, task.ID, msg)
 		tm.logHub.Send(task.ID, msg)
+		task.mu.Lock()
+		task.Logs = append(task.Logs, TaskLog{Message: msg, Timestamp: ts})
+		task.mu.Unlock()
 	}
 
 	cfg := core.NewConfig()
@@ -161,10 +173,23 @@ func (tm *TaskManager) runTask(task *Task) {
 	if cfg.MoEmailAPIKey == "" {
 		cfg.MoEmailAPIKey = os.Getenv("MOEMAIL_API_KEY")
 	}
+	cfg.CfEmailBaseURL = task.Config.CfEmailURL
+	if cfg.CfEmailBaseURL == "" {
+		cfg.CfEmailBaseURL = os.Getenv("CF_EMAIL_BASE_URL")
+	}
+	cfg.CfEmailAuth = task.Config.CfEmailAuth
+	if cfg.CfEmailAuth == "" {
+		cfg.CfEmailAuth = os.Getenv("CF_EMAIL_AUTH")
+	}
+
+	emailMode := task.Config.EmailMode
+	if emailMode == "" {
+		emailMode = "moemail"
+	}
+	cfg.EmailMode = emailMode
 
 	var outlookAccounts []email.OutlookAccount
-	if task.Config.UseOutlook {
-		cfg.UseOutlook = true
+	if emailMode == "outlook" {
 		csvPath := task.Config.OutlookCSV
 		if csvPath == "" {
 			csvPath = tm.dataDir + "/outlook.csv"
@@ -181,6 +206,8 @@ func (tm *TaskManager) runTask(task *Task) {
 		}
 		outlookAccounts = accounts
 		sendLog("Outlook 模式: 已加载 %d 个账号", len(accounts))
+	} else if emailMode == "cloudflare" {
+		sendLog("临时邮箱模式 (Cloudflare Temp Email)")
 	} else {
 		sendLog("临时邮箱模式 (MoeMail)")
 	}
@@ -206,7 +233,7 @@ func (tm *TaskManager) runTask(task *Task) {
 			taskCfg.Password = core.GenPassword()
 
 			var acc email.OutlookAccount
-			if cfg.UseOutlook {
+			if emailMode == "outlook" {
 				var idx int
 				var ok bool
 				acc, idx, ok = getNext()
@@ -221,43 +248,12 @@ func (tm *TaskManager) runTask(task *Task) {
 			}
 
 			reg := core.NewRegistrar(&taskCfg)
-
-			// Capture log output during registration and forward to WebSocket
-			logReader, logWriter := io.Pipe()
-			origOutput := log.Writer()
-			log.SetOutput(io.MultiWriter(origOutput, logWriter))
-
-			done := make(chan struct{})
-			go func() {
-				buf := make([]byte, 4096)
-				for {
-					n, err := logReader.Read(buf)
-					if n > 0 {
-						lines := strings.Split(strings.TrimSpace(string(buf[:n])), "\n")
-						for _, line := range lines {
-							line = strings.TrimSpace(line)
-							if line != "" {
-								tm.logHub.Send(task.ID, line)
-							}
-						}
-					}
-					if err != nil {
-						break
-					}
-				}
-				close(done)
-			}()
-
 			result := reg.Run()
-
-			log.SetOutput(origOutput)
-			logWriter.Close()
-			<-done
 
 			errStr, _ := result["error"].(string)
 			if errStr == "邮箱已注册过，跳过" {
 				emailAddr, _ := result["email"].(string)
-				if emailAddr == "" && cfg.UseOutlook {
+				if emailAddr == "" && emailMode == "outlook" {
 					emailAddr = acc.Email
 				}
 				sendLog("[%d/%d] %s 已注册，跳过", num+1, task.Total, emailAddr)
@@ -284,17 +280,18 @@ func (tm *TaskManager) runTask(task *Task) {
 					tr.CreditUsed, _ = v["credit_used"].(float64)
 					tr.CreditLimit, _ = v["credit_limit"].(float64)
 				}
-				sendLog("[%d/%d] %s 注册成功!", num+1, task.Total, tr.Email)
 			} else {
 				task.Failed++
 				tr.Error = errStr
-				if len(tr.Error) > 100 {
-					tr.Error = tr.Error[:100]
-				}
-				sendLog("[%d/%d] %s 失败: %s (status=%v)", num+1, task.Total, tr.Email, tr.Error, result["status"])
 			}
 			task.Results = append(task.Results, tr)
 			task.mu.Unlock()
+
+			if statusVal == "success" {
+				sendLog("[%d/%d] %s 注册成功!", num+1, task.Total, tr.Email)
+			} else {
+				sendLog("[%d/%d] %s 失败: %s (status=%v)", num+1, task.Total, tr.Email, tr.Error, result["status"])
+			}
 			tm.persistResults(task)
 			return
 		}
@@ -305,6 +302,35 @@ func (tm *TaskManager) runTask(task *Task) {
 	if conc < 1 {
 		conc = 1
 	}
+
+	// Capture global log output for the entire task execution
+	logReader, logWriter := io.Pipe()
+	origOutput := log.Writer()
+	log.SetOutput(io.MultiWriter(origOutput, logWriter))
+	logDone := make(chan struct{})
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := logReader.Read(buf)
+			if n > 0 {
+				lines := strings.Split(strings.TrimSpace(string(buf[:n])), "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if line != "" {
+						ts := time.Now().Format("15:04:05")
+						tm.logHub.Send(task.ID, line)
+						task.mu.Lock()
+						task.Logs = append(task.Logs, TaskLog{Message: line, Timestamp: ts})
+						task.mu.Unlock()
+					}
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		close(logDone)
+	}()
 
 	stopped := false
 	if conc > 1 {
@@ -345,6 +371,11 @@ func (tm *TaskManager) runTask(task *Task) {
 			}
 		}
 	}
+
+	// Stop capturing global log output
+	log.SetOutput(origOutput)
+	logWriter.Close()
+	<-logDone
 
 	task.mu.Lock()
 	if task.Status == TaskRunning {

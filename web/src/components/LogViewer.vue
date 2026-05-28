@@ -1,35 +1,40 @@
 <template>
   <div class="log-viewer">
     <div ref="logContainer" class="log-container">
-      <div v-for="(log, index) in logs" :key="index" class="log-line">
+      <div v-for="(log, index) in allLogs" :key="index" class="log-line">
         <span class="log-time">{{ formatTime(log.timestamp) }}</span>
         <span class="log-msg">{{ log.message }}</span>
       </div>
-      <div v-if="logs.length === 0" class="log-empty">等待日志...</div>
+      <div v-if="allLogs.length === 0" class="log-empty">等待日志...</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
 interface LogEntry {
-  taskId: string
+  taskId?: string
   message: string
   timestamp: string
 }
 
 const props = defineProps<{
   taskId: string
+  historyLogs?: LogEntry[]
 }>()
 
-const logs = ref<LogEntry[]>([])
+const liveLogs = ref<LogEntry[]>([])
 const logContainer = ref<HTMLElement | null>(null)
 let ws: WebSocket | null = null
 
+const allLogs = computed(() => {
+  const history = props.historyLogs || []
+  return [...history, ...liveLogs.value]
+})
+
 function formatTime(ts: string) {
   if (!ts) return ''
-  // Backend sends time as "15:04:05" format, use directly
   if (/^\d{2}:\d{2}:\d{2}$/.test(ts)) {
     return ts
   }
@@ -54,32 +59,23 @@ function connect() {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data) as LogEntry
-      logs.value.push(data)
+      liveLogs.value.push(data)
       scrollToBottom()
     } catch {
-      logs.value.push({
-        taskId: props.taskId,
+      liveLogs.value.push({
         message: event.data,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toLocaleTimeString('zh-CN'),
       })
       scrollToBottom()
     }
   }
 
   ws.onerror = () => {
-    logs.value.push({
-      taskId: props.taskId,
-      message: '[连接错误]',
-      timestamp: new Date().toISOString(),
-    })
+    // silently ignore connection errors for completed tasks
   }
 
   ws.onclose = () => {
-    logs.value.push({
-      taskId: props.taskId,
-      message: '[连接已关闭]',
-      timestamp: new Date().toISOString(),
-    })
+    // no-op
   }
 }
 
@@ -94,13 +90,18 @@ watch(
   () => props.taskId,
   (newId) => {
     disconnect()
-    logs.value = []
+    liveLogs.value = []
     if (newId) connect()
   }
 )
 
+watch(allLogs, () => {
+  scrollToBottom()
+})
+
 onMounted(() => {
   if (props.taskId) connect()
+  scrollToBottom()
 })
 
 onUnmounted(disconnect)

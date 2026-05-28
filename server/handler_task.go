@@ -27,7 +27,28 @@ func HandleCreateTask(tm *TaskManager) gin.HandlerFunc {
 func HandleListTasks(tm *TaskManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tasks := tm.ListTasks()
-		c.JSON(http.StatusOK, gin.H{"tasks": tasks})
+		type TaskSummary struct {
+			ID        string     `json:"id"`
+			Status    TaskStatus `json:"status"`
+			Config    TaskConfig `json:"config"`
+			Success   int        `json:"success"`
+			Failed    int        `json:"failed"`
+			Total     int        `json:"total"`
+			CreatedAt string     `json:"createdAt"`
+			StartedAt string     `json:"startedAt,omitempty"`
+			EndedAt   string     `json:"endedAt,omitempty"`
+		}
+		summaries := make([]TaskSummary, 0, len(tasks))
+		for _, t := range tasks {
+			t.mu.Lock()
+			summaries = append(summaries, TaskSummary{
+				ID: t.ID, Status: t.Status, Config: t.Config,
+				Success: t.Success, Failed: t.Failed, Total: t.Total,
+				CreatedAt: t.CreatedAt, StartedAt: t.StartedAt, EndedAt: t.EndedAt,
+			})
+			t.mu.Unlock()
+		}
+		c.JSON(http.StatusOK, gin.H{"tasks": summaries})
 	}
 }
 
@@ -39,7 +60,27 @@ func HandleGetTask(tm *TaskManager) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"task": task})
+		task.mu.Lock()
+		snapshot := struct {
+			ID        string       `json:"id"`
+			Status    TaskStatus   `json:"status"`
+			Config    TaskConfig   `json:"config"`
+			Results   []TaskResult `json:"results"`
+			Logs      []TaskLog    `json:"logs,omitempty"`
+			Success   int          `json:"success"`
+			Failed    int          `json:"failed"`
+			Total     int          `json:"total"`
+			CreatedAt string       `json:"createdAt"`
+			StartedAt string       `json:"startedAt,omitempty"`
+			EndedAt   string       `json:"endedAt,omitempty"`
+		}{
+			ID: task.ID, Status: task.Status, Config: task.Config,
+			Results: task.Results, Logs: task.Logs,
+			Success: task.Success, Failed: task.Failed, Total: task.Total,
+			CreatedAt: task.CreatedAt, StartedAt: task.StartedAt, EndedAt: task.EndedAt,
+		}
+		task.mu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"task": snapshot})
 	}
 }
 

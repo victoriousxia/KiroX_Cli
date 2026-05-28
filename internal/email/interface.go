@@ -16,3 +16,8 @@ type TempEmailService interface {
 func NewMoEmailService(baseURL, apiKey, proxy, chromeVer string) TempEmailService {
 	return NewMoEmailProvider(baseURL, apiKey, proxy, chromeVer)
 }
+
+// NewCloudflareEmailService 创建 Cloudflare Temp Email 临时邮箱服务
+func NewCloudflareEmailService(baseURL, adminAuth, proxy, chromeVer string) TempEmailService {
+	return NewCloudflareEmailProvider(baseURL, adminAuth, proxy, chromeVer)
+}

@@ -1,9 +1,10 @@
 <template>
   <el-form :model="form" label-width="120px" label-position="top">
-    <el-form-item label="注册模式">
-      <el-radio-group v-model="form.useOutlook">
-        <el-radio :value="false">MoeMail</el-radio>
-        <el-radio :value="true">Outlook</el-radio>
+    <el-form-item label="邮箱模式">
+      <el-radio-group v-model="form.emailMode">
+        <el-radio value="moemail">MoeMail</el-radio>
+        <el-radio value="cloudflare">Cloudflare Temp Email</el-radio>
+        <el-radio value="outlook">Outlook</el-radio>
       </el-radio-group>
     </el-form-item>
 
@@ -23,12 +24,21 @@
       <el-input v-model="form.proxy" placeholder="留空使用全局配置" />
     </el-form-item>
 
-    <template v-if="!form.useOutlook">
+    <template v-if="form.emailMode === 'moemail'">
       <el-form-item label="MoeMail URL">
-        <el-input v-model="form.moEmailUrl" placeholder="MoeMail 服务地址" />
+        <el-input v-model="form.moEmailUrl" placeholder="留空使用全局配置" />
       </el-form-item>
       <el-form-item label="MoeMail API Key">
-        <el-input v-model="form.moEmailKey" placeholder="MoeMail API 密钥" />
+        <el-input v-model="form.moEmailKey" placeholder="留空使用全局配置" />
+      </el-form-item>
+    </template>
+
+    <template v-if="form.emailMode === 'cloudflare'">
+      <el-form-item label="CF Email URL">
+        <el-input v-model="form.cfEmailUrl" placeholder="留空使用全局配置" />
+      </el-form-item>
+      <el-form-item label="CF Admin Auth">
+        <el-input v-model="form.cfEmailAuth" placeholder="留空使用全局配置" show-password />
       </el-form-item>
     </template>
 
@@ -53,10 +63,12 @@ const form = reactive<TaskForm>({
   concurrency: 1,
   delay: 0,
   proxy: '',
-  useOutlook: false,
+  emailMode: 'moemail',
   outlookCsv: '',
   moEmailUrl: '',
   moEmailKey: '',
+  cfEmailUrl: '',
+  cfEmailAuth: '',
 })
 
 function handleSubmit() {

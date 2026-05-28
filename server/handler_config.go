@@ -14,9 +14,11 @@ import (
 )
 
 type AppConfig struct {
-	Proxy      string `json:"proxy"`
-	MoEmailURL string `json:"moEmailUrl"`
-	MoEmailKey string `json:"moEmailKey"`
+	Proxy       string `json:"proxy"`
+	MoEmailURL  string `json:"moEmailUrl"`
+	MoEmailKey  string `json:"moEmailKey"`
+	CfEmailURL  string `json:"cfEmailUrl"`
+	CfEmailAuth string `json:"cfEmailAuth"`
 }
 
 func HandleGetConfig(dataDir string) gin.HandlerFunc {
@@ -25,9 +27,11 @@ func HandleGetConfig(dataDir string) gin.HandlerFunc {
 		saved := loadSavedEnv(filepath.Join(dataDir, ".env"))
 
 		cfg := AppConfig{
-			Proxy:      saved["PROXY"],
-			MoEmailURL: saved["MOEMAIL_BASE_URL"],
-			MoEmailKey: saved["MOEMAIL_API_KEY"],
+			Proxy:       saved["PROXY"],
+			MoEmailURL:  saved["MOEMAIL_BASE_URL"],
+			MoEmailKey:  saved["MOEMAIL_API_KEY"],
+			CfEmailURL:  saved["CF_EMAIL_BASE_URL"],
+			CfEmailAuth: saved["CF_EMAIL_AUTH"],
 		}
 		// Fall back to environment variables if not in saved file
 		if cfg.Proxy == "" {
@@ -38,6 +42,12 @@ func HandleGetConfig(dataDir string) gin.HandlerFunc {
 		}
 		if cfg.MoEmailKey == "" {
 			cfg.MoEmailKey = os.Getenv("MOEMAIL_API_KEY")
+		}
+		if cfg.CfEmailURL == "" {
+			cfg.CfEmailURL = os.Getenv("CF_EMAIL_BASE_URL")
+		}
+		if cfg.CfEmailAuth == "" {
+			cfg.CfEmailAuth = os.Getenv("CF_EMAIL_AUTH")
 		}
 		if cfg.MoEmailURL == "" {
 			cfg.MoEmailURL = "https://api.moemail.app"
@@ -84,6 +94,12 @@ func HandleUpdateConfig(dataDir string) gin.HandlerFunc {
 		if cfg.MoEmailKey != "" {
 			content += "MOEMAIL_API_KEY=" + cfg.MoEmailKey + "\n"
 		}
+		if cfg.CfEmailURL != "" {
+			content += "CF_EMAIL_BASE_URL=" + cfg.CfEmailURL + "\n"
+		}
+		if cfg.CfEmailAuth != "" {
+			content += "CF_EMAIL_AUTH=" + cfg.CfEmailAuth + "\n"
+		}
 
 		if err := os.WriteFile(envPath, []byte(content), 0644); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save config: " + err.Error()})
@@ -98,6 +114,12 @@ func HandleUpdateConfig(dataDir string) gin.HandlerFunc {
 		}
 		if cfg.MoEmailKey != "" {
 			os.Setenv("MOEMAIL_API_KEY", cfg.MoEmailKey)
+		}
+		if cfg.CfEmailURL != "" {
+			os.Setenv("CF_EMAIL_BASE_URL", cfg.CfEmailURL)
+		}
+		if cfg.CfEmailAuth != "" {
+			os.Setenv("CF_EMAIL_AUTH", cfg.CfEmailAuth)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "config updated"})

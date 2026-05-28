@@ -68,7 +68,7 @@ func main() {
 	// 模式选择
 	var outlookAccounts []email.OutlookAccount
 	if *useOutlook {
-		cfg.UseOutlook = true
+		cfg.EmailMode = "outlook"
 		cfg.OutlookCSV = *outlookCSV
 		var err error
 		outlookAccounts, err = email.ParseOutlookCSV(*outlookCSV)
@@ -117,7 +117,7 @@ func runBatch(count int, cfg *core.Config, output string, delay, concurrency int
 			taskCfg.Password = core.GenPassword()
 
 			var acc email.OutlookAccount
-			if cfg.UseOutlook {
+			if cfg.EmailMode == "outlook" {
 				var ok bool
 				var accIdx int
 				acc, accIdx, ok = getNextAccount()

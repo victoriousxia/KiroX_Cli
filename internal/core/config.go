@@ -34,8 +34,12 @@ type Config struct {
 	MoEmailBaseURL string
 	MoEmailAPIKey  string
 
-	// Outlook 模式
-	UseOutlook     bool
+	// Cloudflare Temp Email 配置
+	CfEmailBaseURL string
+	CfEmailAuth    string
+
+	// 邮箱模式: "moemail", "outlook", "cloudflare"
+	EmailMode      string
 	OutlookCSV     string
 	OutlookAccount *email.OutlookAccount // 当前使用的 Outlook 账号
 }

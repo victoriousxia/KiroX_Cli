@@ -207,20 +207,36 @@ func (r *Registrar) Step2Device() error {
 	return nil
 }
 
-// Step3Email 获取邮箱 (临时邮箱、Outlook)
+// Step3Email 获取邮箱 (临时邮箱、Outlook、Cloudflare)
 func (r *Registrar) Step3Email() error {
-	if r.Cfg.UseOutlook && r.Cfg.OutlookAccount != nil {
-		log.Println("[3] 使用 Outlook 邮箱")
-		r.Email = r.Cfg.OutlookAccount.Email
+	switch r.Cfg.EmailMode {
+	case "outlook":
+		if r.Cfg.OutlookAccount != nil {
+			log.Println("[3] 使用 Outlook 邮箱")
+			r.Email = r.Cfg.OutlookAccount.Email
+			log.Printf("email=%s", r.Email)
+			return nil
+		}
+		return fmt.Errorf("Outlook 模式但未提供账号")
+	case "cloudflare":
+		log.Println("[3] 创建 Cloudflare 临时邮箱")
+		r.EmailSvc = email.NewCloudflareEmailService(r.Cfg.CfEmailBaseURL, r.Cfg.CfEmailAuth, r.Cfg.Proxy, r.Identity.ChromeVer)
+		r.Email = r.EmailSvc.Create()
+		if r.Email == "" {
+			return fmt.Errorf("Cloudflare 临时邮箱创建失败，请检查 CF_EMAIL_BASE_URL 和 CF_EMAIL_AUTH 配置")
+		}
+		log.Printf("email=%s", r.Email)
+		return nil
+	default:
+		log.Println("[3] 创建临时邮箱")
+		r.EmailSvc = email.NewMoEmailService(r.Cfg.MoEmailBaseURL, r.Cfg.MoEmailAPIKey, r.Cfg.Proxy, r.Identity.ChromeVer)
+		r.Email = r.EmailSvc.Create()
+		if r.Email == "" {
+			return fmt.Errorf("MoeMail 临时邮箱创建失败，请检查 MOEMAIL_BASE_URL 和 MOEMAIL_API_KEY 配置")
+		}
 		log.Printf("email=%s", r.Email)
 		return nil
 	}
-	log.Println("[3] 创建临时邮箱")
-	// 使用 MoEmail 临时邮箱服务
-	r.EmailSvc = email.NewMoEmailService(r.Cfg.MoEmailBaseURL, r.Cfg.MoEmailAPIKey, r.Cfg.Proxy, r.Identity.ChromeVer)
-	r.Email = r.EmailSvc.Create()
-	log.Printf("email=%s", r.Email)
-	return nil
 }
 
 // Step4Portal Portal 初始化

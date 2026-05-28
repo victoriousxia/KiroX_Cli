@@ -40,10 +40,12 @@ export interface TaskForm {
   concurrency: number
   delay: number
   proxy: string
-  useOutlook: boolean
+  emailMode: string
   outlookCsv: string
   moEmailUrl: string
   moEmailKey: string
+  cfEmailUrl: string
+  cfEmailAuth: string
 }
 
 export interface Task {
@@ -66,9 +68,15 @@ export interface TaskResult {
   creditLimit?: number
 }
 
+export interface TaskLog {
+  message: string
+  timestamp: string
+}
+
 export interface TaskDetail extends Task {
   config: TaskForm
   results: TaskResult[]
+  logs?: TaskLog[]
 }
 
 export async function createTask(form: TaskForm): Promise<Task> {
@@ -132,6 +140,8 @@ export interface AppConfig {
   proxy: string
   moEmailUrl: string
   moEmailKey: string
+  cfEmailUrl: string
+  cfEmailAuth: string
 }
 
 export async function getConfig(): Promise<AppConfig> {

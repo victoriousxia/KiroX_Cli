@@ -77,7 +77,7 @@ func (r *Registrar) Run() map[string]interface{} {
 			}
 		}
 	} else {
-		if r.Cfg.UseOutlook {
+		if r.Cfg.EmailMode == "outlook" {
 			return map[string]interface{}{"status": "failed", "error": "邮箱已注册过，跳过", "email": r.Email}
 		}
 		return map[string]interface{}{"status": "failed", "error": "临时邮箱不可能已存在", "email": r.Email}

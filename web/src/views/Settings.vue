@@ -23,6 +23,12 @@
         <el-form-item label="MoeMail API Key">
           <el-input v-model="config.moEmailKey" placeholder="MoeMail API 密钥" show-password />
         </el-form-item>
+        <el-form-item label="CF Email URL">
+          <el-input v-model="config.cfEmailUrl" placeholder="Cloudflare Temp Email 服务地址" />
+        </el-form-item>
+        <el-form-item label="CF Admin Auth">
+          <el-input v-model="config.cfEmailAuth" placeholder="Cloudflare Temp Email 管理密钥 (可选)" show-password />
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="handleSave">
             保存配置
@@ -87,6 +93,8 @@ const config = ref<AppConfig>({
   proxy: '',
   moEmailUrl: '',
   moEmailKey: '',
+  cfEmailUrl: '',
+  cfEmailAuth: '',
 })
 const saving = ref(false)
 const uploading = ref(false)

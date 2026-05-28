@@ -59,7 +59,7 @@
     <el-drawer
       v-model="showDetail"
       title="任务详情"
-      size="600px"
+      size="700px"
       direction="rtl"
     >
       <div v-if="currentTask" class="task-detail">
@@ -76,9 +76,29 @@
           <el-descriptions-item label="创建时间">{{ currentTask.createdAt }}</el-descriptions-item>
         </el-descriptions>
 
+        <!-- Results Table -->
+        <div v-if="currentTask.results && currentTask.results.length > 0" class="results-section">
+          <h4>注册结果</h4>
+          <el-table :data="currentTask.results" size="small" max-height="300">
+            <el-table-column prop="email" label="邮箱" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'success' ? 'success' : 'danger'" size="small">
+                  {{ row.status === 'success' ? '成功' : '失败' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="error" label="错误信息" min-width="200" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="error-text">{{ row.error || '-' }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
         <div class="log-section">
-          <h4>实时日志</h4>
-          <LogViewer :task-id="currentTask.id" />
+          <h4>任务日志</h4>
+          <LogViewer :task-id="currentTask.id" :history-logs="currentTask.logs" />
         </div>
       </div>
     </el-drawer>
@@ -226,6 +246,20 @@ onUnmounted(() => {
 
 .task-detail {
   padding: 0 8px;
+}
+
+.results-section {
+  margin-top: 24px;
+}
+
+.results-section h4 {
+  color: #e0e0e0;
+  margin-bottom: 12px;
+}
+
+.error-text {
+  color: #f87171;
+  font-size: 12px;
 }
 
 .log-section {
