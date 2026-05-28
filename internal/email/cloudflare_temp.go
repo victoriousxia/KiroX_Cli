@@ -196,11 +196,67 @@ func (c *CloudflareEmailProvider) fetchCode() (string, error) {
 	}
 
 	latest := result.Results[0]
+	log.Printf("[CfEmail] 收到邮件: id=%d, source=%s, subject=%s, message_len=%d", latest.ID, latest.Source, latest.Subject, len(latest.Message))
 	text := latest.Subject + " " + latest.Message
 	if code := ExtractCode(text); code != "" {
 		return code, nil
 	}
+
+	// 列表接口可能不含完整邮件内容，尝试获取单封邮件详情
+	detail, err := c.fetchMailDetail(latest.ID)
+	if err != nil {
+		return "", nil
+	}
+	if code := ExtractCode(detail); code != "" {
+		return code, nil
+	}
 	return "", nil
+}
+
+func (c *CloudflareEmailProvider) fetchMailDetail(mailID int) (string, error) {
+	url := fmt.Sprintf("%s/api/mails/%d", c.baseURL, mailID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.jwt)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	var detail struct {
+		Raw     string `json:"raw"`
+		Message string `json:"message"`
+		HTML    string `json:"html"`
+		Text    string `json:"text"`
+		Content string `json:"content"`
+		Subject string `json:"subject"`
+	}
+	if err := json.Unmarshal(body, &detail); err != nil {
+		// 可能直接返回纯文本
+		return string(body), nil
+	}
+
+	// 尝试所有可能的内容字段
+	candidates := []string{detail.Raw, detail.Message, detail.HTML, detail.Text, detail.Content}
+	for _, c := range candidates {
+		if c != "" {
+			if code := ExtractCode(c); code != "" {
+				return c, nil
+			}
+		}
+	}
+	// 返回所有内容拼接，让上层再尝试提取
+	return detail.Subject + " " + detail.Raw + " " + detail.Message + " " + detail.HTML + " " + detail.Text + " " + detail.Content, nil
 }
 
 func randomName(length int) string {
