@@ -130,13 +130,13 @@ function fallbackCopy(text: string) {
   textarea.style.opacity = '0'
   document.body.appendChild(textarea)
   textarea.select()
-  try {
-    document.execCommand('copy')
+  const success = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (success) {
     ElMessage.success('已复制')
-  } catch {
+  } else {
     ElMessage.error('复制失败')
   }
-  document.body.removeChild(textarea)
 }
 
 function copyAll() {
