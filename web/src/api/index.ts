@@ -101,11 +101,16 @@ export function stopTask(id: string) {
 // Accounts
 export interface Account {
   email: string
+  password: string
+  emailPassword?: string
   subscription: string
   creditUsed: number
   creditLimit: number
   provider: string
   region: string
+  clientId?: string
+  clientSecret?: string
+  refreshToken?: string
 }
 
 export interface VerifyAccountInput {

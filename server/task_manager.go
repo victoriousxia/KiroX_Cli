@@ -38,16 +38,17 @@ type TaskConfig struct {
 }
 
 type TaskResult struct {
-	Email        string  `json:"email"`
-	Password     string  `json:"password,omitempty"`
-	Status       string  `json:"status"`
-	Error        string  `json:"error,omitempty"`
-	Subscription string  `json:"subscription,omitempty"`
-	CreditUsed   float64 `json:"creditUsed,omitempty"`
-	CreditLimit  float64 `json:"creditLimit,omitempty"`
-	ClientID     string  `json:"clientId,omitempty"`
-	ClientSecret string  `json:"clientSecret,omitempty"`
-	RefreshToken string  `json:"refreshToken,omitempty"`
+	Email         string  `json:"email"`
+	Password      string  `json:"password,omitempty"`
+	EmailPassword string  `json:"emailPassword,omitempty"`
+	Status        string  `json:"status"`
+	Error         string  `json:"error,omitempty"`
+	Subscription  string  `json:"subscription,omitempty"`
+	CreditUsed    float64 `json:"creditUsed,omitempty"`
+	CreditLimit   float64 `json:"creditLimit,omitempty"`
+	ClientID      string  `json:"clientId,omitempty"`
+	ClientSecret  string  `json:"clientSecret,omitempty"`
+	RefreshToken  string  `json:"refreshToken,omitempty"`
 }
 
 type TaskLog struct {
@@ -275,6 +276,9 @@ func (tm *TaskManager) runTask(task *Task) {
 			if statusVal == "success" {
 				task.Success++
 				tr.Password, _ = result["password"].(string)
+				if emailMode == "outlook" && taskCfg.OutlookAccount != nil {
+					tr.EmailPassword = taskCfg.OutlookAccount.Password
+				}
 				tr.ClientID, _ = result["client_id"].(string)
 				tr.ClientSecret, _ = result["client_secret"].(string)
 				if at, ok := result["aws_token"].(map[string]interface{}); ok {
@@ -429,7 +433,7 @@ func (tm *TaskManager) persistResults(task *Task) {
 
 	for _, r := range results {
 		if r.Status == "success" && !seen[r.Email] {
-			existing = append(existing, map[string]interface{}{
+			entry := map[string]interface{}{
 				"email":        r.Email,
 				"password":     r.Password,
 				"refreshToken": r.RefreshToken,
@@ -440,7 +444,11 @@ func (tm *TaskManager) persistResults(task *Task) {
 				"creditLimit":  r.CreditLimit,
 				"provider":     "BuilderId",
 				"region":       "us-east-1",
-			})
+			}
+			if r.EmailPassword != "" {
+				entry["emailPassword"] = r.EmailPassword
+			}
+			existing = append(existing, entry)
 			seen[r.Email] = true
 		}
 	}

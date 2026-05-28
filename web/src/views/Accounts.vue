@@ -17,7 +17,12 @@
     </div>
 
     <el-card shadow="never" class="accounts-card">
-      <el-table :data="filteredAccounts" style="width: 100%">
+      <el-table
+        :data="filteredAccounts"
+        style="width: 100%"
+        @row-click="handleRowClick"
+        row-class-name="clickable-row"
+      >
         <el-table-column prop="email" label="邮箱" min-width="220" show-overflow-tooltip />
         <el-table-column prop="subscription" label="订阅类型" width="140" />
         <el-table-column label="额度使用" width="160">
@@ -29,6 +34,58 @@
         <el-table-column prop="region" label="区域" width="100" />
       </el-table>
     </el-card>
+
+    <el-dialog
+      v-model="detailVisible"
+      title="账户详情"
+      width="520px"
+      :close-on-click-modal="true"
+    >
+      <div v-if="selectedAccount" class="account-detail">
+        <div class="detail-item">
+          <span class="detail-label">邮箱</span>
+          <div class="detail-value-row">
+            <span class="detail-value">{{ selectedAccount.email }}</span>
+            <el-button size="small" text @click="copyText(selectedAccount.email)">复制</el-button>
+          </div>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Kiro 密码</span>
+          <div class="detail-value-row">
+            <span class="detail-value mono">{{ selectedAccount.password || '-' }}</span>
+            <el-button v-if="selectedAccount.password" size="small" text @click="copyText(selectedAccount.password)">复制</el-button>
+          </div>
+        </div>
+        <div class="detail-item" v-if="selectedAccount.emailPassword">
+          <span class="detail-label">邮箱密码</span>
+          <div class="detail-value-row">
+            <span class="detail-value mono">{{ selectedAccount.emailPassword }}</span>
+            <el-button size="small" text @click="copyText(selectedAccount.emailPassword!)">复制</el-button>
+          </div>
+        </div>
+        <el-divider />
+        <div class="detail-item">
+          <span class="detail-label">订阅类型</span>
+          <span class="detail-value">{{ selectedAccount.subscription || '-' }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">额度</span>
+          <span class="detail-value">{{ selectedAccount.creditUsed }} / {{ selectedAccount.creditLimit }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">提供商</span>
+          <span class="detail-value">{{ selectedAccount.provider }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">区域</span>
+          <span class="detail-value">{{ selectedAccount.region }}</span>
+        </div>
+        <el-divider />
+        <div class="copy-all-section">
+          <el-button type="primary" @click="copyAll">一键复制全部信息</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -40,12 +97,43 @@ import { ElMessage } from 'element-plus'
 const accounts = ref<Account[]>([])
 const searchText = ref('')
 const verifying = ref(false)
+const detailVisible = ref(false)
+const selectedAccount = ref<Account | null>(null)
 
 const filteredAccounts = computed(() => {
   if (!searchText.value) return accounts.value
   const keyword = searchText.value.toLowerCase()
   return accounts.value.filter((a) => a.email.toLowerCase().includes(keyword))
 })
+
+function handleRowClick(row: Account) {
+  selectedAccount.value = row
+  detailVisible.value = true
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制')
+  } catch {
+    ElMessage.error('复制失败')
+  }
+}
+
+function copyAll() {
+  if (!selectedAccount.value) return
+  const acc = selectedAccount.value
+  const lines = [
+    `邮箱: ${acc.email}`,
+    `Kiro密码: ${acc.password || '-'}`,
+  ]
+  if (acc.emailPassword) {
+    lines.push(`邮箱密码: ${acc.emailPassword}`)
+  }
+  lines.push(`订阅: ${acc.subscription || '-'}`)
+  lines.push(`额度: ${acc.creditUsed} / ${acc.creditLimit}`)
+  copyText(lines.join('\n'))
+}
 
 async function loadAccounts() {
   try {
@@ -58,7 +146,6 @@ async function loadAccounts() {
 async function handleVerify() {
   verifying.value = true
   try {
-    // Reload accounts after verify - actual verify needs account credentials
     await loadAccounts()
     ElMessage.success('验证完成')
   } catch {
@@ -69,7 +156,8 @@ async function handleVerify() {
 }
 
 function handleExport() {
-  const data = JSON.stringify(accounts.value, null, 2)
+  const exportData = accounts.value.map(({ password, emailPassword, clientId, clientSecret, refreshToken, ...rest }) => rest)
+  const data = JSON.stringify(exportData, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -106,5 +194,58 @@ onMounted(loadAccounts)
   background-color: #1a1a2e;
   border: 1px solid #2a2a3e;
   border-radius: 8px;
+}
+
+:deep(.clickable-row) {
+  cursor: pointer;
+}
+
+:deep(.clickable-row:hover > td) {
+  background-color: #252540 !important;
+}
+
+.account-detail {
+  padding: 4px 0;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.detail-label {
+  width: 90px;
+  flex-shrink: 0;
+  color: #909399;
+  font-size: 14px;
+}
+
+.detail-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-value {
+  color: #e0e0e0;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.detail-value.mono {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  background: #1a1a2e;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #2a2a3e;
+}
+
+.copy-all-section {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
 }
 </style>
