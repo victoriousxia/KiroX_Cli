@@ -317,12 +317,12 @@ func (c *CloudflareEmailProvider) fetchRawMail(mailID int) (string, error) {
 
 	// 如果有 raw 字段，解析 MIME
 	if detail.Raw != "" {
-		if code := extractCodeFromRaw(detail.Raw); code != "" {
-			return detail.Raw, nil
-		}
 		parsed := extractTextFromMIME(detail.Raw)
 		if code := ExtractCode(parsed); code != "" {
 			return parsed, nil
+		}
+		if code := ExtractCode(detail.Raw); code != "" {
+			return detail.Raw, nil
 		}
 	}
 
