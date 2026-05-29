@@ -32,6 +32,7 @@ func (r *Registrar) Run() map[string]interface{} {
 	}
 
 	// 步骤 6: 提交邮箱
+	longHumanDelay()
 	status, err := r.Step6SubmitEmail()
 	if err != nil {
 		log.Printf("注册失败: %v", err)
@@ -54,7 +55,11 @@ func (r *Registrar) Run() map[string]interface{} {
 				log.Printf("注册失败 [%s]: %v", s.name, err)
 				return map[string]interface{}{"status": "failed", "error": err.Error(), "email": r.Email}
 			}
-			humanDelay()
+			if s.name == "ProfileStart" || s.name == "SendOTP" {
+				longHumanDelay()
+			} else {
+				humanDelay()
+			}
 		}
 
 		otp, err := r.Step10GetOTP()
@@ -96,7 +101,8 @@ func (r *Registrar) Run() map[string]interface{} {
 		}
 	}
 
-	time.Sleep(2 * time.Second)
+	// 注册完成后等待一段时间再验活，模拟真人行为
+	time.Sleep(time.Duration(5000+rand.Intn(5001)) * time.Millisecond)
 
 	awsToken, err := r.Step13SSOToken()
 	if err != nil {
@@ -109,6 +115,8 @@ func (r *Registrar) Run() map[string]interface{} {
 		log.Printf("注册失败: %v", err)
 		return map[string]interface{}{"status": "failed", "error": err.Error(), "email": r.Email}
 	}
+
+	humanDelay()
 
 	kiroTokens, err := r.Step15KiroExchange(kiroCode)
 	if err != nil {
@@ -142,7 +150,12 @@ func (r *Registrar) Run() map[string]interface{} {
 	}
 }
 
-// humanDelay 模拟人类操作延迟 (200-800ms)
+// humanDelay 模拟人类操作延迟 (1.5-4秒)
 func humanDelay() {
-	time.Sleep(time.Duration(200+rand.Intn(601)) * time.Millisecond)
+	time.Sleep(time.Duration(1500+rand.Intn(2501)) * time.Millisecond)
+}
+
+// longHumanDelay 模拟较长的人类思考延迟 (3-7秒)
+func longHumanDelay() {
+	time.Sleep(time.Duration(3000+rand.Intn(4001)) * time.Millisecond)
 }
