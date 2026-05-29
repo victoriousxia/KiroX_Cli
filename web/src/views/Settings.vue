@@ -17,6 +17,17 @@
             {{ proxyInfo }}
           </div>
         </el-form-item>
+        <el-form-item label="二级代理 (住宅IP)">
+          <div style="display: flex; gap: 8px; width: 100%; align-items: center">
+            <span class="proxy-dot" :class="upstreamProxyStatusClass"></span>
+            <el-input v-model="config.upstreamProxy" placeholder="例如: socks5://user:pass@residential-ip:port" />
+            <el-button :loading="testingUpstream" @click="handleTestUpstreamProxy">检测代理</el-button>
+          </div>
+          <div v-if="upstreamProxyInfo" class="proxy-info" :class="upstreamProxyStatusClass">
+            {{ upstreamProxyInfo }}
+          </div>
+          <div class="field-tip">设置后注册流量将通过此代理出口，目标网站看到的是住宅 IP</div>
+        </el-form-item>
         <el-form-item label="MoeMail API URL">
           <el-input v-model="config.moEmailUrl" placeholder="MoeMail 服务地址" />
         </el-form-item>
@@ -91,6 +102,7 @@ import type { UploadFile } from 'element-plus'
 
 const config = ref<AppConfig>({
   proxy: '',
+  upstreamProxy: '',
   moEmailUrl: '',
   moEmailKey: '',
   cfEmailUrl: '',
@@ -111,6 +123,17 @@ const proxyInfo = ref('')
 const proxyStatusClass = computed(() => {
   if (proxyStatus.value === 'ok') return 'status-ok'
   if (proxyStatus.value === 'fail') return 'status-fail'
+  return 'status-unknown'
+})
+
+// Upstream proxy status
+const testingUpstream = ref(false)
+const upstreamProxyStatus = ref<'unknown' | 'ok' | 'fail'>('unknown')
+const upstreamProxyInfo = ref('')
+
+const upstreamProxyStatusClass = computed(() => {
+  if (upstreamProxyStatus.value === 'ok') return 'status-ok'
+  if (upstreamProxyStatus.value === 'fail') return 'status-fail'
   return 'status-unknown'
 })
 
@@ -158,6 +181,31 @@ async function handleTestProxy() {
   }
 }
 
+async function handleTestUpstreamProxy() {
+  if (!config.value.upstreamProxy) {
+    upstreamProxyStatus.value = 'fail'
+    upstreamProxyInfo.value = '未配置二级代理地址'
+    return
+  }
+  testingUpstream.value = true
+  try {
+    const res = await api.post('/api/config/test-proxy', { proxy: config.value.upstreamProxy })
+    const data = res.data
+    if (data.success) {
+      upstreamProxyStatus.value = 'ok'
+      upstreamProxyInfo.value = `IP: ${data.ip} | ${data.country} ${data.region} ${data.city} | ISP: ${data.isp} | 延迟: ${data.latency}ms`
+    } else {
+      upstreamProxyStatus.value = 'fail'
+      upstreamProxyInfo.value = data.error || '代理连接失败'
+    }
+  } catch (e: any) {
+    upstreamProxyStatus.value = 'fail'
+    upstreamProxyInfo.value = e.response?.data?.error || '检测失败'
+  } finally {
+    testingUpstream.value = false
+  }
+}
+
 async function handleSave() {
   saving.value = true
   try {
@@ -200,9 +248,11 @@ async function handleUpload() {
 onMounted(async () => {
   await loadConfig()
   loadOutlookAccounts()
-  // 页面加载时自动检测代理状态
   if (config.value.proxy) {
     handleTestProxy()
+  }
+  if (config.value.upstreamProxy) {
+    handleTestUpstreamProxy()
   }
 })
 </script>
@@ -274,5 +324,11 @@ onMounted(async () => {
 
 .proxy-info.status-unknown {
   color: #6b7280;
+}
+
+.field-tip {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
 }
 </style>

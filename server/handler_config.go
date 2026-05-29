@@ -14,11 +14,12 @@ import (
 )
 
 type AppConfig struct {
-	Proxy       string `json:"proxy"`
-	MoEmailURL  string `json:"moEmailUrl"`
-	MoEmailKey  string `json:"moEmailKey"`
-	CfEmailURL  string `json:"cfEmailUrl"`
-	CfEmailAuth string `json:"cfEmailAuth"`
+	Proxy          string `json:"proxy"`
+	UpstreamProxy  string `json:"upstreamProxy"`
+	MoEmailURL     string `json:"moEmailUrl"`
+	MoEmailKey     string `json:"moEmailKey"`
+	CfEmailURL     string `json:"cfEmailUrl"`
+	CfEmailAuth    string `json:"cfEmailAuth"`
 }
 
 func HandleGetConfig(dataDir string) gin.HandlerFunc {
@@ -27,15 +28,19 @@ func HandleGetConfig(dataDir string) gin.HandlerFunc {
 		saved := loadSavedEnv(filepath.Join(dataDir, ".env"))
 
 		cfg := AppConfig{
-			Proxy:       saved["PROXY"],
-			MoEmailURL:  saved["MOEMAIL_BASE_URL"],
-			MoEmailKey:  saved["MOEMAIL_API_KEY"],
-			CfEmailURL:  saved["CF_EMAIL_BASE_URL"],
-			CfEmailAuth: saved["CF_EMAIL_AUTH"],
+			Proxy:         saved["PROXY"],
+			UpstreamProxy: saved["UPSTREAM_PROXY"],
+			MoEmailURL:    saved["MOEMAIL_BASE_URL"],
+			MoEmailKey:    saved["MOEMAIL_API_KEY"],
+			CfEmailURL:    saved["CF_EMAIL_BASE_URL"],
+			CfEmailAuth:   saved["CF_EMAIL_AUTH"],
 		}
 		// Fall back to environment variables if not in saved file
 		if cfg.Proxy == "" {
 			cfg.Proxy = os.Getenv("PROXY")
+		}
+		if cfg.UpstreamProxy == "" {
+			cfg.UpstreamProxy = os.Getenv("UPSTREAM_PROXY")
 		}
 		if cfg.MoEmailURL == "" {
 			cfg.MoEmailURL = os.Getenv("MOEMAIL_BASE_URL")
@@ -88,13 +93,16 @@ func HandleUpdateConfig(dataDir string) gin.HandlerFunc {
 		if cfg.Proxy != "" {
 			content += "PROXY=" + cfg.Proxy + "\n"
 		}
+		if cfg.UpstreamProxy != "" {
+			content += "UPSTREAM_PROXY=" + cfg.UpstreamProxy + "\n"
+		}
 		if cfg.MoEmailURL != "" {
 			content += "MOEMAIL_BASE_URL=" + cfg.MoEmailURL + "\n"
 		}
 		if cfg.MoEmailKey != "" {
 			content += "MOEMAIL_API_KEY=" + cfg.MoEmailKey + "\n"
 		}
-		if cfg.CfEmailURL != "" {
+		if cfg.CfEmailURL != "" {
 			content += "CF_EMAIL_BASE_URL=" + cfg.CfEmailURL + "\n"
 		}
 		if cfg.CfEmailAuth != "" {
@@ -108,18 +116,33 @@ func HandleUpdateConfig(dataDir string) gin.HandlerFunc {
 
 		if cfg.Proxy != "" {
 			os.Setenv("PROXY", cfg.Proxy)
+		} else {
+			os.Unsetenv("PROXY")
+		}
+		if cfg.UpstreamProxy != "" {
+			os.Setenv("UPSTREAM_PROXY", cfg.UpstreamProxy)
+		} else {
+			os.Unsetenv("UPSTREAM_PROXY")
 		}
 		if cfg.MoEmailURL != "" {
 			os.Setenv("MOEMAIL_BASE_URL", cfg.MoEmailURL)
+		} else {
+			os.Unsetenv("MOEMAIL_BASE_URL")
 		}
 		if cfg.MoEmailKey != "" {
 			os.Setenv("MOEMAIL_API_KEY", cfg.MoEmailKey)
+		} else {
+			os.Unsetenv("MOEMAIL_API_KEY")
 		}
 		if cfg.CfEmailURL != "" {
 			os.Setenv("CF_EMAIL_BASE_URL", cfg.CfEmailURL)
+		} else {
+			os.Unsetenv("CF_EMAIL_BASE_URL")
 		}
 		if cfg.CfEmailAuth != "" {
 			os.Setenv("CF_EMAIL_AUTH", cfg.CfEmailAuth)
+		} else {
+			os.Unsetenv("CF_EMAIL_AUTH")
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "config updated"})

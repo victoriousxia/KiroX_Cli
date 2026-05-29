@@ -40,6 +40,7 @@ export interface TaskForm {
   concurrency: number
   delay: number
   proxy: string
+  upstreamProxy: string
   emailMode: string
   outlookCsv: string
   moEmailUrl: string
@@ -143,6 +144,7 @@ export async function verifyAccounts(accounts: VerifyAccountInput[]): Promise<Ve
 // Config
 export interface AppConfig {
   proxy: string
+  upstreamProxy: string
   moEmailUrl: string
   moEmailKey: string
   cfEmailUrl: string

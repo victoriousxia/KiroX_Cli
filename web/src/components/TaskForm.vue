@@ -24,6 +24,10 @@
       <el-input v-model="form.proxy" placeholder="留空使用全局配置" />
     </el-form-item>
 
+    <el-form-item label="二级代理 (住宅IP)">
+      <el-input v-model="form.upstreamProxy" placeholder="留空使用全局配置" />
+    </el-form-item>
+
     <template v-if="form.emailMode === 'moemail'">
       <el-form-item label="MoeMail URL">
         <el-input v-model="form.moEmailUrl" placeholder="留空使用全局配置" />
@@ -63,6 +67,7 @@ const form = reactive<TaskForm>({
   concurrency: 1,
   delay: 0,
   proxy: '',
+  upstreamProxy: '',
   emailMode: 'moemail',
   outlookCsv: '',
   moEmailUrl: '',

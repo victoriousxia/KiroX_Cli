@@ -25,16 +25,17 @@ const (
 )
 
 type TaskConfig struct {
-	Count       int    `json:"count"`
-	Concurrency int    `json:"concurrency"`
-	Delay       int    `json:"delay"`
-	Proxy       string `json:"proxy"`
-	EmailMode   string `json:"emailMode"`
-	OutlookCSV  string `json:"outlookCsv"`
-	MoEmailURL  string `json:"moEmailUrl"`
-	MoEmailKey  string `json:"moEmailKey"`
-	CfEmailURL  string `json:"cfEmailUrl"`
-	CfEmailAuth string `json:"cfEmailAuth"`
+	Count          int    `json:"count"`
+	Concurrency    int    `json:"concurrency"`
+	Delay          int    `json:"delay"`
+	Proxy          string `json:"proxy"`
+	UpstreamProxy  string `json:"upstreamProxy"`
+	EmailMode      string `json:"emailMode"`
+	OutlookCSV     string `json:"outlookCsv"`
+	MoEmailURL     string `json:"moEmailUrl"`
+	MoEmailKey     string `json:"moEmailKey"`
+	CfEmailURL     string `json:"cfEmailUrl"`
+	CfEmailAuth    string `json:"cfEmailAuth"`
 }
 
 type TaskResult struct {
@@ -162,7 +163,13 @@ func (tm *TaskManager) runTask(task *Task) {
 	}
 
 	cfg := core.NewConfig()
-	cfg.Proxy = task.Config.Proxy
+	cfg.Proxy = task.Config.UpstreamProxy
+	if cfg.Proxy == "" {
+		cfg.Proxy = os.Getenv("UPSTREAM_PROXY")
+	}
+	if cfg.Proxy == "" {
+		cfg.Proxy = task.Config.Proxy
+	}
 	if cfg.Proxy == "" {
 		cfg.Proxy = os.Getenv("PROXY")
 	}
