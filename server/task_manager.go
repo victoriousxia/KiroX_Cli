@@ -13,7 +13,6 @@ import (
 
 	"reg_go/internal/core"
 	"reg_go/internal/email"
-	httputil "reg_go/internal/http"
 )
 
 type TaskStatus string
