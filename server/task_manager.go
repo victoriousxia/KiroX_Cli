@@ -13,6 +13,7 @@ import (
 
 	"reg_go/internal/core"
 	"reg_go/internal/email"
+	httputil "reg_go/internal/http"
 )
 
 type TaskStatus string
@@ -163,15 +164,36 @@ func (tm *TaskManager) runTask(task *Task) {
 	}
 
 	cfg := core.NewConfig()
-	cfg.Proxy = task.Config.UpstreamProxy
-	if cfg.Proxy == "" {
-		cfg.Proxy = os.Getenv("UPSTREAM_PROXY")
+
+	// Resolve upstream and primary proxy
+	upstreamProxy := task.Config.UpstreamProxy
+	if upstreamProxy == "" {
+		upstreamProxy = os.Getenv("UPSTREAM_PROXY")
 	}
-	if cfg.Proxy == "" {
-		cfg.Proxy = task.Config.Proxy
+	primaryProxy := task.Config.Proxy
+	if primaryProxy == "" {
+		primaryProxy = os.Getenv("PROXY")
 	}
-	if cfg.Proxy == "" {
-		cfg.Proxy = os.Getenv("PROXY")
+
+	var stopChain func()
+	if upstreamProxy != "" && primaryProxy != "" {
+		// Chain: primary → upstream → target
+		localAddr, stop, err := httputil.ProxyChain(primaryProxy, upstreamProxy)
+		if err != nil {
+			sendLog("代理链启动失败: %v", err)
+			task.mu.Lock()
+			task.Status = TaskCompleted
+			task.EndedAt = time.Now().Format("2006-01-02 15:04:05")
+			task.mu.Unlock()
+			return
+		}
+		stopChain = stop
+		cfg.Proxy = "socks5://" + localAddr
+		sendLog("代理链已启动: %s → %s", primaryProxy, upstreamProxy)
+	} else if upstreamProxy != "" {
+		cfg.Proxy = upstreamProxy
+	} else {
+		cfg.Proxy = primaryProxy
 	}
 	cfg.MoEmailBaseURL = task.Config.MoEmailURL
 	if cfg.MoEmailBaseURL == "" {
@@ -413,6 +435,11 @@ func (tm *TaskManager) runTask(task *Task) {
 		task.EndedAt = time.Now().Format("2006-01-02 15:04:05")
 	}
 	task.mu.Unlock()
+
+	if stopChain != nil {
+		stopChain()
+	}
+
 	sendLog("任务完成! 成功: %d, 失败: %d", task.Success, task.Failed)
 }
 

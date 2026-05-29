@@ -225,7 +225,8 @@ func HandleGetOutlookAccounts(dataDir string) gin.HandlerFunc {
 func HandleTestProxy(dataDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Proxy string `json:"proxy"`
+			Proxy      string `json:"proxy"`
+			ChainProxy string `json:"chainProxy"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -242,13 +243,34 @@ func HandleTestProxy(dataDir string) gin.HandlerFunc {
 			return
 		}
 
-		client := httputil.NewTLSClient(proxy, true, "137")
+		actualProxy := proxy
+		var stopChain func()
+
+		if req.ChainProxy != "" {
+			localAddr, stop, err := httputil.ProxyChain(req.ChainProxy, proxy)
+			if err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"error":   "代理链启动失败: " + err.Error(),
+					"proxy":   proxy,
+				})
+				return
+			}
+			stopChain = stop
+			actualProxy = "socks5://" + localAddr
+		}
+
+		client := httputil.NewTLSClient(actualProxy, true, "137")
 
 		start := time.Now()
 		httpReq, _ := http.NewRequest("GET", "https://api.ip.sb/geoip", nil)
 		httpReq.Header.Set("User-Agent", "Mozilla/5.0")
 		resp, err := client.Do(httpReq)
 		elapsed := time.Since(start).Milliseconds()
+
+		if stopChain != nil {
+			stopChain()
+		}
 
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{

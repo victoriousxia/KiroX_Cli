@@ -26,7 +26,7 @@
           <div v-if="upstreamProxyInfo" class="proxy-info" :class="upstreamProxyStatusClass">
             {{ upstreamProxyInfo }}
           </div>
-          <div class="field-tip">设置后注册流量将通过此代理出口，目标网站看到的是住宅 IP</div>
+          <div class="field-tip">设置后注册流量将通过一级代理链式连接到此代理出口，目标网站看到的是住宅 IP</div>
         </el-form-item>
         <el-form-item label="MoeMail API URL">
           <el-input v-model="config.moEmailUrl" placeholder="MoeMail 服务地址" />
@@ -187,9 +187,17 @@ async function handleTestUpstreamProxy() {
     upstreamProxyInfo.value = '未配置二级代理地址'
     return
   }
+  if (!config.value.proxy) {
+    upstreamProxyStatus.value = 'fail'
+    upstreamProxyInfo.value = '需要先配置一级代理，二级代理通过一级代理链式连接'
+    return
+  }
   testingUpstream.value = true
   try {
-    const res = await api.post('/api/config/test-proxy', { proxy: config.value.upstreamProxy })
+    const res = await api.post('/api/config/test-proxy', {
+      proxy: config.value.upstreamProxy,
+      chainProxy: config.value.proxy,
+    })
     const data = res.data
     if (data.success) {
       upstreamProxyStatus.value = 'ok'
