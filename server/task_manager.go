@@ -176,6 +176,11 @@ func (tm *TaskManager) runTask(task *Task) {
 	}
 
 	var stopChain func()
+	defer func() {
+		if stopChain != nil {
+			stopChain()
+		}
+	}()
 	if upstreamProxy != "" && primaryProxy != "" {
 		// Chain: primary → upstream → target
 		localAddr, stop, err := httputil.ProxyChain(primaryProxy, upstreamProxy)
@@ -435,10 +440,6 @@ func (tm *TaskManager) runTask(task *Task) {
 		task.EndedAt = time.Now().Format("2006-01-02 15:04:05")
 	}
 	task.mu.Unlock()
-
-	if stopChain != nil {
-		stopChain()
-	}
 
 	sendLog("任务完成! 成功: %d, 失败: %d", task.Success, task.Failed)
 }

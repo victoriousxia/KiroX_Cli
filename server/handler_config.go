@@ -245,6 +245,11 @@ func HandleTestProxy(dataDir string) gin.HandlerFunc {
 
 		actualProxy := proxy
 		var stopChain func()
+		defer func() {
+			if stopChain != nil {
+				stopChain()
+			}
+		}()
 
 		if req.ChainProxy != "" {
 			localAddr, stop, err := httputil.ProxyChain(req.ChainProxy, proxy)
@@ -267,10 +272,6 @@ func HandleTestProxy(dataDir string) gin.HandlerFunc {
 		httpReq.Header.Set("User-Agent", "Mozilla/5.0")
 		resp, err := client.Do(httpReq)
 		elapsed := time.Since(start).Milliseconds()
-
-		if stopChain != nil {
-			stopChain()
-		}
 
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{

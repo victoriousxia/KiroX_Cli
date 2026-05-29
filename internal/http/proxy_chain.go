@@ -246,12 +246,16 @@ func relay(a, b net.Conn) {
 	go func() {
 		defer wg.Done()
 		io.Copy(b, a)
-		b.(*net.TCPConn).CloseWrite()
+		if tc, ok := b.(interface{ CloseWrite() error }); ok {
+			tc.CloseWrite()
+		}
 	}()
 	go func() {
 		defer wg.Done()
 		io.Copy(a, b)
-		a.(*net.TCPConn).CloseWrite()
+		if tc, ok := a.(interface{ CloseWrite() error }); ok {
+			tc.CloseWrite()
+		}
 	}()
 	wg.Wait()
 }
