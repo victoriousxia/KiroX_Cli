@@ -175,30 +175,15 @@ func (tm *TaskManager) runTask(task *Task) {
 		primaryProxy = os.Getenv("PROXY")
 	}
 
-	var stopChain func()
-	defer func() {
-		if stopChain != nil {
-			stopChain()
-		}
-	}()
-	if upstreamProxy != "" && primaryProxy != "" {
-		// Chain: primary → upstream → target
-		localAddr, stop, err := httputil.ProxyChain(primaryProxy, upstreamProxy)
-		if err != nil {
-			sendLog("代理链启动失败: %v", err)
-			task.mu.Lock()
-			task.Status = TaskCompleted
-			task.EndedAt = time.Now().Format("2006-01-02 15:04:05")
-			task.mu.Unlock()
-			return
-		}
-		stopChain = stop
-		cfg.Proxy = "socks5://" + localAddr
-		sendLog("代理链已启动: %s → %s", primaryProxy, upstreamProxy)
-	} else if upstreamProxy != "" {
+	// Priority: upstream proxy > primary proxy
+	// When upstream is set, use it directly as tls-client proxy
+	// (V2rayA transparent proxy handles routing to the upstream)
+	if upstreamProxy != "" {
 		cfg.Proxy = upstreamProxy
-	} else {
+		sendLog("使用二级代理: %s", upstreamProxy)
+	} else if primaryProxy != "" {
 		cfg.Proxy = primaryProxy
+		sendLog("使用一级代理: %s", primaryProxy)
 	}
 	cfg.MoEmailBaseURL = task.Config.MoEmailURL
 	if cfg.MoEmailBaseURL == "" {
