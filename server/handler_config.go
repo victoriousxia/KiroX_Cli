@@ -264,7 +264,7 @@ func HandleTestProxy(dataDir string) gin.HandlerFunc {
 			}
 
 			start := time.Now()
-			httpReq, _ := http.NewRequest("GET", "https://api.ip.sb/geoip", nil)
+			httpReq, _ := http.NewRequest("GET", "https://ipinfo.io/json", nil)
 			httpReq.Header.Set("User-Agent", "Mozilla/5.0")
 			resp, err := chainClient.Do(httpReq)
 			elapsed := time.Since(start).Milliseconds()
@@ -287,11 +287,7 @@ func HandleTestProxy(dataDir string) gin.HandlerFunc {
 			country, _ := geoData["country"].(string)
 			region, _ := geoData["region"].(string)
 			city, _ := geoData["city"].(string)
-			isp, _ := geoData["isp"].(string)
-			org, _ := geoData["organization"].(string)
-			if isp == "" {
-				isp = org
-			}
+			isp, _ := geoData["org"].(string)
 
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
