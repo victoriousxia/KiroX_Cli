@@ -252,17 +252,58 @@ func HandleTestProxy(dataDir string) gin.HandlerFunc {
 		}()
 
 		if req.ChainProxy != "" {
-			localAddr, stop, err := httputil.ProxyChain(req.ChainProxy, proxy)
+			// Use ChainedHTTPClient directly (no local listener needed)
+			chainClient, err := httputil.ChainedHTTPClient(req.ChainProxy, proxy)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
-					"error":   "代理链启动失败: " + err.Error(),
+					"error":   "代理链创建失败: " + err.Error(),
 					"proxy":   proxy,
 				})
 				return
 			}
-			stopChain = stop
-			actualProxy = "socks5://" + localAddr
+
+			start := time.Now()
+			httpReq, _ := http.NewRequest("GET", "https://api.ip.sb/geoip", nil)
+			httpReq.Header.Set("User-Agent", "Mozilla/5.0")
+			resp, err := chainClient.Do(httpReq)
+			elapsed := time.Since(start).Milliseconds()
+
+			if err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"error":   "代理连接失败: " + err.Error(),
+					"proxy":   proxy,
+				})
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+
+			var geoData map[string]interface{}
+			json.Unmarshal(body, &geoData)
+
+			ip, _ := geoData["ip"].(string)
+			country, _ := geoData["country"].(string)
+			region, _ := geoData["region"].(string)
+			city, _ := geoData["city"].(string)
+			isp, _ := geoData["isp"].(string)
+			org, _ := geoData["organization"].(string)
+			if isp == "" {
+				isp = org
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"proxy":   proxy,
+				"ip":      ip,
+				"country": country,
+				"region":  region,
+				"city":    city,
+				"isp":     isp,
+				"latency": elapsed,
+			})
+			return
 		}
 
 		client := httputil.NewTLSClient(actualProxy, true, "137")

@@ -1,11 +1,13 @@
 package http
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	gohttp "net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -13,9 +15,64 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-// ProxyChain starts a local SOCKS5 server that chains two proxies.
-// Traffic flow: client → local SOCKS5 → primaryProxy → upstreamProxy → target
-// Returns the local address (e.g. "127.0.0.1:xxxxx") and a stop function.
+// ChainedHTTPClient creates an http.Client that chains two SOCKS5 proxies.
+// Traffic flow: client → primaryProxy → upstreamProxy → target
+// This bypasses tls-client and uses Go's standard net/http, suitable for proxy testing.
+func ChainedHTTPClient(primaryProxy, upstreamProxy string) (*gohttp.Client, error) {
+	primaryDialer, err := socksDialerFromURL(primaryProxy)
+	if err != nil {
+		return nil, fmt.Errorf("primary proxy invalid: %w", err)
+	}
+
+	upstreamURL, err := url.Parse(upstreamProxy)
+	if err != nil {
+		return nil, fmt.Errorf("upstream proxy URL invalid: %w", err)
+	}
+
+	// Create a dialer that chains: primary → upstream → target
+	chainDialer := &chainedSocksDialer{
+		primary:      primaryDialer,
+		upstreamHost: upstreamURL.Host,
+		upstreamUser: upstreamURL.User,
+	}
+
+	transport := &gohttp.Transport{
+		DialContext:     chainDialer.DialContext,
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	return &gohttp.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+	}, nil
+}
+
+type chainedSocksDialer struct {
+	primary      proxy.Dialer
+	upstreamHost string
+	upstreamUser *url.Userinfo
+}
+
+func (d *chainedSocksDialer) DialContext(ctx interface{ Done() <-chan struct{} }, network, addr string) (net.Conn, error) {
+	return d.Dial(network, addr)
+}
+
+func (d *chainedSocksDialer) Dial(network, addr string) (net.Conn, error) {
+	// Step 1: Connect to upstream proxy through primary proxy
+	conn, err := d.primary.Dial("tcp", d.upstreamHost)
+	if err != nil {
+		return nil, fmt.Errorf("connect to upstream via primary failed: %w", err)
+	}
+
+	// Step 2: SOCKS5 handshake with upstream proxy to reach target
+	if err := upstreamSocks5Connect(conn, addr, d.upstreamUser); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("upstream SOCKS5 handshake failed: %w", err)
+	}
+
+	return conn, nil
+}
+
 func ProxyChain(primaryProxy, upstreamProxy string) (localAddr string, stop func(), err error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
