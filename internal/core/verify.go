@@ -49,44 +49,74 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 
 // ActivateProfile 激活 Kiro/Q Developer 免费订阅 (CreateProfile)
 // 新注册的 Builder ID 需要调用此接口创建 profileArn 才能使用 Q API
-func (r *Registrar) ActivateProfile(kiroTokens map[string]interface{}) error {
+func (r *Registrar) ActivateProfile(awsToken map[string]interface{}) error {
 	log.Println("[激活] 创建 Q Developer Profile")
 	client := httputil.NewTLSClient(r.Cfg.Proxy, true, r.Identity.ChromeVer)
 
-	accessToken, _ := kiroTokens["accessToken"].(string)
-	if accessToken == "" {
-		return fmt.Errorf("无 Kiro accessToken")
-	}
-
-	// 调用 CreateProfile 激活免费订阅
-	payload, _ := json.Marshal(map[string]interface{}{})
-	req, _ := fhttp.NewRequest("POST", "https://q.us-east-1.amazonaws.com/CreateProfile",
-		bytes.NewReader(payload))
-	req.Header.Set("Accept", "application/json")
+	// 用 Step 1 的 client 刷新 token（这个 token 能通过 Q API 认证）
+	refreshToken, _ := awsToken["refreshToken"].(string)
+	tokenBody, _ := json.Marshal(map[string]string{
+		"clientId":     r.ClientID,
+		"clientSecret": r.ClientSecret,
+		"refreshToken": refreshToken,
+		"grantType":    "refresh_token",
+	})
+	req, _ := fhttp.NewRequest("POST", "https://oidc.us-east-1.amazonaws.com/token",
+		bytes.NewReader(tokenBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("User-Agent", kiroUA)
-
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("CreateProfile 请求失败: %v", err)
+		return fmt.Errorf("token 刷新失败: %v", err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("token 刷新失败: %d", resp.StatusCode)
+	}
+	var tok map[string]interface{}
+	json.Unmarshal(body, &tok)
+	accessToken, _ := tok["accessToken"].(string)
 
-	if resp.StatusCode == 200 || resp.StatusCode == 201 {
-		log.Printf("Profile 激活成功 (%d)", resp.StatusCode)
-		return nil
+	// 尝试多个可能的 profile 激活端点
+	activateEndpoints := []struct {
+		method string
+		url    string
+		body   string
+	}{
+		{"POST", "https://q.us-east-1.amazonaws.com/CreateProfile", "{}"},
+		{"POST", "https://q.us-east-1.amazonaws.com/StartOnboarding", "{}"},
+		{"PUT", "https://q.us-east-1.amazonaws.com/UpdateProfile", `{"acceptTerms":true}`},
 	}
 
-	// 409 表示 profile 已存在，也算成功
-	if resp.StatusCode == 409 {
-		log.Println("Profile 已存在 (409)")
-		return nil
+	for _, ep := range activateEndpoints {
+		payload := bytes.NewReader([]byte(ep.body))
+		req, _ := fhttp.NewRequest(ep.method, ep.url, payload)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("User-Agent", kiroUA)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[激活] %s %s 请求失败: %v", ep.method, ep.url, err)
+			continue
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		log.Printf("[激活] %s %s → %d %s", ep.method, ep.url, resp.StatusCode, string(respBody))
+
+		if resp.StatusCode == 200 || resp.StatusCode == 201 {
+			log.Println("Profile 激活成功!")
+			return nil
+		}
+		if resp.StatusCode == 409 {
+			log.Println("Profile 已存在")
+			return nil
+		}
 	}
 
-	log.Printf("CreateProfile 响应: %d %s", resp.StatusCode, string(body))
-	return fmt.Errorf("CreateProfile 失败: %d", resp.StatusCode)
+	return fmt.Errorf("所有激活端点均失败，需要抓包确认真实端点")
 }
 
 // VerifyAlive 验活: 刷新 Token + 查用量 + 查模型
