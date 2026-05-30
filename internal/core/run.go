@@ -131,7 +131,7 @@ func (r *Registrar) Run() map[string]interface{} {
 	time.Sleep(verifyDelay)
 
 	// 激活 Q Developer Profile（新账号必须先 CreateProfile 才能调用 Q API）
-	if err := r.ActivateProfile(awsToken); err != nil {
+	if err := r.ActivateProfile(awsToken, kiroTokens); err != nil {
 		log.Printf("Profile 激活失败: %v (继续验活)", err)
 	}
 
