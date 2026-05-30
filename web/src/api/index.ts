@@ -141,6 +141,20 @@ export async function verifyAccounts(accounts: VerifyAccountInput[]): Promise<Ve
   return res.data.results || []
 }
 
+// Subscribe
+export interface SubscribeInput {
+  clientId: string
+  clientSecret: string
+  refreshToken: string
+  proxy?: string
+  subscriptionType?: string
+}
+
+export async function subscribeAccount(input: SubscribeInput): Promise<string> {
+  const res = await api.post('/api/accounts/subscribe', input)
+  return res.data.checkoutUrl
+}
+
 // Config
 export interface AppConfig {
   proxy: string

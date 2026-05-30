@@ -83,6 +83,14 @@
         <el-divider />
         <div class="copy-all-section">
           <el-button type="primary" @click="copyAll">一键复制全部信息</el-button>
+          <el-button
+            type="warning"
+            @click="handleSubscribe"
+            :loading="subscribing"
+            :disabled="!selectedAccount?.clientId || !selectedAccount?.clientSecret || !selectedAccount?.refreshToken"
+          >
+            订阅 Pro+
+          </el-button>
         </div>
       </div>
     </el-dialog>
@@ -91,12 +99,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getAccounts, type Account } from '../api'
+import { getAccounts, subscribeAccount, type Account } from '../api'
 import { ElMessage } from 'element-plus'
 
 const accounts = ref<Account[]>([])
 const searchText = ref('')
 const verifying = ref(false)
+const subscribing = ref(false)
 const detailVisible = ref(false)
 const selectedAccount = ref<Account | null>(null)
 
@@ -184,6 +193,28 @@ function handleExport() {
   a.download = 'accounts.json'
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function handleSubscribe() {
+  if (!selectedAccount.value?.clientId || !selectedAccount.value?.clientSecret || !selectedAccount.value?.refreshToken) {
+    ElMessage.warning('该账号缺少凭证信息，无法订阅')
+    return
+  }
+  subscribing.value = true
+  try {
+    const checkoutUrl = await subscribeAccount({
+      clientId: selectedAccount.value.clientId,
+      clientSecret: selectedAccount.value.clientSecret,
+      refreshToken: selectedAccount.value.refreshToken,
+    })
+    window.open(checkoutUrl, '_blank')
+    ElMessage.success('已打开支付页面')
+  } catch (e: any) {
+    const msg = e?.response?.data?.error || e?.message || '获取支付链接失败'
+    ElMessage.error(msg)
+  } finally {
+    subscribing.value = false
+  }
 }
 
 onMounted(loadAccounts)
