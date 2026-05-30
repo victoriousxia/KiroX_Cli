@@ -50,7 +50,7 @@ func HandleSubscribe(tm *TaskManager, dataDir string) gin.HandlerFunc {
 				}
 				c.JSON(http.StatusForbidden, gin.H{
 					"error":   err.Error(),
-					"removed": true,
+					"removed": req.Email != "",
 					"email":   req.Email,
 				})
 				return

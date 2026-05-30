@@ -218,8 +218,12 @@ async function handleSubscribe() {
       refreshToken: selectedAccount.value.refreshToken,
       email: selectedAccount.value.email,
     })
-    window.open(checkoutUrl, '_blank')
-    ElMessage.success('已打开支付页面')
+    if (checkoutUrl) {
+      window.open(checkoutUrl, '_blank')
+      ElMessage.success('已打开支付页面')
+    } else {
+      ElMessage.error('未获取到支付链接')
+    }
   } catch (e: any) {
     const resp = e?.response?.data
     if (resp?.removed) {

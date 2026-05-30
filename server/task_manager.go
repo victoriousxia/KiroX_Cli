@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -559,7 +560,7 @@ func (tm *TaskManager) RemoveAccount(emailAddr, dataDir string) {
 	tm.fileMu.Lock()
 	defer tm.fileMu.Unlock()
 
-	path := dataDir + "/results.json"
+	path := filepath.Join(dataDir, "results.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return
