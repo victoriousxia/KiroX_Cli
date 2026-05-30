@@ -55,6 +55,7 @@ func NewServer(dataDir string) *gin.Engine {
 
 		api.GET("/accounts", HandleListAccounts(tm))
 		api.POST("/accounts/verify", HandleVerifyAccounts(tm))
+		api.POST("/accounts/subscribe", HandleSubscribe(dataDir))
 
 		api.GET("/config", HandleGetConfig(dataDir))
 		api.POST("/config", HandleUpdateConfig(dataDir))
