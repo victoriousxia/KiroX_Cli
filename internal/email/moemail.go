@@ -169,6 +169,10 @@ func (m *MoEmailProvider) GetAddress() string {
 	return m.address
 }
 
+func (m *MoEmailProvider) GetJWT() string {
+	return ""
+}
+
 // WaitForCode 等待验证码
 func (m *MoEmailProvider) WaitForCode(timeout, interval int) (string, error) {
 	if m.emailID == "" {

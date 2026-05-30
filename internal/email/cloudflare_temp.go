@@ -138,6 +138,10 @@ func (c *CloudflareEmailProvider) GetAddress() string {
 	return c.address
 }
 
+func (c *CloudflareEmailProvider) GetJWT() string {
+	return c.jwt
+}
+
 func (c *CloudflareEmailProvider) WaitForCode(timeout, interval int) (string, error) {
 	if c.jwt == "" {
 		return "", fmt.Errorf("邮箱未创建")

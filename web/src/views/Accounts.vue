@@ -63,6 +63,13 @@
             <el-button size="small" text @click="copyText(selectedAccount.emailPassword!)">复制</el-button>
           </div>
         </div>
+        <div class="detail-item" v-if="selectedAccount.emailJwt">
+          <span class="detail-label">邮箱 JWT</span>
+          <div class="detail-value-row">
+            <span class="detail-value mono token-value">{{ selectedAccount.emailJwt }}</span>
+            <el-button size="small" text @click="copyText(selectedAccount.emailJwt!)">复制</el-button>
+          </div>
+        </div>
         <el-divider />
         <div class="detail-item">
           <span class="detail-label">订阅类型</span>
@@ -158,6 +165,9 @@ function copyAll() {
   if (acc.emailPassword) {
     lines.push(`邮箱密码: ${acc.emailPassword}`)
   }
+  if (acc.emailJwt) {
+    lines.push(`邮箱JWT: ${acc.emailJwt}`)
+  }
   lines.push(`订阅: ${acc.subscription || '-'}`)
   lines.push(`额度: ${acc.creditUsed} / ${acc.creditLimit}`)
   copyText(lines.join('\n'))
@@ -184,7 +194,7 @@ async function handleVerify() {
 }
 
 function handleExport() {
-  const exportData = accounts.value.map(({ password, emailPassword, clientId, clientSecret, refreshToken, ...rest }) => rest)
+  const exportData = accounts.value.map(({ password, emailPassword, emailJwt, clientId, clientSecret, refreshToken, ...rest }) => rest)
   const data = JSON.stringify(exportData, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -299,6 +309,13 @@ onMounted(loadAccounts)
   padding: 2px 8px;
   border-radius: 4px;
   border: 1px solid #2a2a3e;
+}
+
+.detail-value.token-value {
+  font-size: 12px;
+  max-height: 60px;
+  overflow-y: auto;
+  line-height: 1.4;
 }
 
 .copy-all-section {

@@ -104,6 +104,7 @@ export interface Account {
   email: string
   password: string
   emailPassword?: string
+  emailJwt?: string
   subscription: string
   creditUsed: number
   creditLimit: number

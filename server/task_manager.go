@@ -42,6 +42,7 @@ type TaskResult struct {
 	Email         string  `json:"email"`
 	Password      string  `json:"password,omitempty"`
 	EmailPassword string  `json:"emailPassword,omitempty"`
+	EmailJWT      string  `json:"emailJwt,omitempty"`
 	Status        string  `json:"status"`
 	Error         string  `json:"error,omitempty"`
 	Subscription  string  `json:"subscription,omitempty"`
@@ -294,6 +295,7 @@ func (tm *TaskManager) runTask(task *Task) {
 			if statusVal == "success" {
 				task.Success++
 				tr.Password, _ = result["password"].(string)
+				tr.EmailJWT, _ = result["email_jwt"].(string)
 				if emailMode == "outlook" && taskCfg.OutlookAccount != nil {
 					tr.EmailPassword = taskCfg.OutlookAccount.Password
 				}
@@ -466,6 +468,9 @@ func (tm *TaskManager) persistResults(task *Task) {
 			}
 			if r.EmailPassword != "" {
 				entry["emailPassword"] = r.EmailPassword
+			}
+			if r.EmailJWT != "" {
+				entry["emailJwt"] = r.EmailJWT
 			}
 			existing = append(existing, entry)
 			seen[r.Email] = true

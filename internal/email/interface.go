@@ -10,6 +10,9 @@ type TempEmailService interface {
 
 	// GetAddress 获取当前邮箱地址
 	GetAddress() string
+
+	// GetJWT 获取邮箱登录凭证（仅 Cloudflare 邮箱有值）
+	GetJWT() string
 }
 
 // NewMoEmailService 创建 MoEmail 临时邮箱服务

@@ -158,6 +158,7 @@ func (r *Registrar) Run() map[string]interface{} {
 		"aws_token":     awsToken,
 		"kiro_tokens":   kiroTokens,
 		"verify":        verify,
+		"email_jwt":     r.EmailSvc.GetJWT(),
 	}
 }
 
