@@ -15,13 +15,10 @@ type chromeVersion struct {
 	SecUA   string
 }
 
-// genChromeVersion 动态生成 Chrome 版本信息
+// genChromeVersion 动态生成 Chrome 版本信息（仅使用近期版本）
 func genChromeVersion() chromeVersion {
-	versions := []string{
-		"120", "121", "122", "123", "124", "125", "126", "127", "128", "129",
-		"130", "131", "132", "133", "134", "135", "136", "137", "138", "139",
-		"140", "141", "142", "143", "144",
-	}
+	// 只保留最近 2 个大版本，模拟真实用户的自动更新行为
+	versions := []string{"136", "137"}
 	v := versions[rand.Intn(len(versions))]
 
 	greaseBrands := []string{"Not_A Brand", "Not(A:Brand", "Not-A.Brand", "Not)A;Brand", "Not/A)Brand", "Not A;Brand", "Not?A_Brand"}
@@ -29,8 +26,15 @@ func genChromeVersion() chromeVersion {
 	greaseVer := fmt.Sprintf("%d", 8+rand.Intn(92)) // 8~99
 
 	secUA := fmt.Sprintf(`"%s";v="%s", "Chromium";v="%s", "Google Chrome";v="%s"`, greaseBrand, greaseVer, v, v)
+
+	// 生成真实的小版本号 (major.minor.build.patch)
+	minor := rand.Intn(2) // 0-1
+	build := 6700 + rand.Intn(300)
+	patch := rand.Intn(200)
+	fullVer := fmt.Sprintf("%s.%d.%d.%d", v, minor, build, patch)
+
 	return chromeVersion{
-		Version: v + ".0.0.0",
+		Version: fullVer,
 		SecUA:   secUA,
 	}
 }
@@ -96,114 +100,10 @@ type BrowserIdentity struct {
 	DeviceMemory        int
 	HardwareConcurrency int
 	Platform            string
+	TimeZone            int
 	LsubidPrefixSignin  string
 	LsubidPrefixProfile string
 	WebpackHash         string
-}
-
-// ──────────────────── 算法: GPU 配置生成 ────────────────────
-// 规律: Vendor = "Google Inc. ({芯片厂商})"
-//       Model  = "ANGLE ({芯片厂商}, {芯片型号} Direct3D11 vs_5_0 ps_5_0, D3D11)"
-
-func genGPU() (vendor, model string) {
-	type gpuFamily struct {
-		chipVendor string
-		prefix     string
-		models     []string
-	}
-
-	families := []gpuFamily{
-		{
-			chipVendor: "Intel",
-			prefix:     "Intel(R) ",
-			models: []string{
-				"UHD Graphics 630", "UHD Graphics 730", "UHD Graphics 770",
-				"HD Graphics 530", "HD Graphics 620", "HD Graphics 630",
-				"Iris(R) Xe Graphics", "Iris(R) Xe Graphics (0x000046A6)",
-				"Iris(R) Plus Graphics", "UHD Graphics", "HD Graphics 520",
-				"UHD Graphics 620", "Iris(R) Plus Graphics 655", "Iris(R) Plus Graphics 640",
-				"HD Graphics 4600", "HD Graphics 5500",
-			},
-		},
-		{
-			chipVendor: "NVIDIA",
-			prefix:     "NVIDIA ",
-			models: []string{
-				"GeForce GTX 960", "GeForce GTX 970", "GeForce GTX 980 Ti",
-				"GeForce GTX 1050 Ti", "GeForce GTX 1060 6GB", "GeForce GTX 1070",
-				"GeForce GTX 1080", "GeForce GTX 1080 Ti", "GeForce GTX 1650",
-				"GeForce GTX 1660 Super", "GeForce RTX 2060", "GeForce RTX 2070",
-				"GeForce RTX 2080", "GeForce RTX 3050 Laptop GPU", "GeForce RTX 3060",
-				"GeForce RTX 3060 Ti", "GeForce RTX 3070", "GeForce RTX 3080",
-				"GeForce RTX 4060", "GeForce RTX 4070", "GeForce RTX 4080", "GeForce RTX 4090",
-			},
-		},
-		{
-			chipVendor: "AMD",
-			prefix:     "AMD ",
-			models: []string{
-				"Radeon RX 580", "Radeon RX 5600 XT", "Radeon RX 5700 XT",
-				"Radeon RX 6600 XT", "Radeon RX 6700 XT", "Radeon RX 6800 XT",
-				"Radeon RX 7600", "Radeon RX 7800 XT", "Radeon RX 7900 XTX",
-				"Radeon Vega 8 Graphics", "Radeon(TM) Graphics", "Radeon RX Vega 11 Graphics",
-				"Radeon RX 5500 XT", "Radeon R9 390", "Radeon RX 480",
-			},
-		},
-	}
-
-	f := families[rand.Intn(len(families))]
-	m := f.models[rand.Intn(len(f.models))]
-
-	vendor = fmt.Sprintf("Google Inc. (%s)", f.chipVendor)
-	model = fmt.Sprintf("ANGLE (%s, %s%s Direct3D11 vs_5_0 ps_5_0, D3D11)", f.chipVendor, f.prefix, m)
-	return
-}
-
-// ──────────────────── 算法: 屏幕分辨率生成 ────────────────────
-// 规律: AvailHeight = Height - taskbar(32~48), AvailWidth = Width, ColorDepth = 24
-
-func genScreen() ScreenInfo {
-	type resolution struct {
-		w, h int
-	}
-
-	// 按宽高比分组的常见分辨率
-	r16x9 := []resolution{
-		{1366, 768}, {1536, 864}, {1600, 900},
-		{1920, 1080}, {2560, 1440}, {3840, 2160},
-	}
-	r16x10 := []resolution{
-		{1440, 900}, {1680, 1050}, {1920, 1200}, {2560, 1600},
-	}
-	r21x9 := []resolution{
-		{2560, 1080}, {3440, 1440},
-	}
-	rOther := []resolution{
-		{1280, 720}, {1360, 768}, {2880, 1800},
-	}
-
-	// 按市场份额加权: 16:9 最常见
-	pools := [][]resolution{r16x9, r16x9, r16x9, r16x10, r21x9, rOther}
-	pool := pools[rand.Intn(len(pools))]
-	res := pool[rand.Intn(len(pool))]
-
-	// 任务栏高度 32~48 像素
-	taskbar := 32 + rand.Intn(17) // 32-48
-	// 圆整到 8 的倍数 (Windows 常见)
-	taskbar = (taskbar / 8) * 8
-	if taskbar < 32 {
-		taskbar = 32
-	}
-
-	colorDepths := []int{24, 24, 24, 24, 30} // 24常见, 30是 HDR
-
-	return ScreenInfo{
-		Width:       res.w,
-		Height:      res.h,
-		AvailWidth:  res.w,
-		AvailHeight: res.h - taskbar,
-		ColorDepth:  colorDepths[rand.Intn(len(colorDepths))],
-	}
 }
 
 // ──────────────────── 算法: Math 精度生成 ────────────────────
@@ -215,18 +115,19 @@ func genScreen() ScreenInfo {
 //   家族B: "-0.5765775004286854"   末位 53~55
 
 func genMath() (tan, sin, cos string) {
-	tanEnd := 3 + rand.Intn(100) // 放大截断随机差
-	sinEnd := 3 + rand.Intn(100)
-	tan = fmt.Sprintf("-1.42144882387472%03d", tanEnd)
-	sin = fmt.Sprintf("0.81788191211590%03d", sinEnd)
+	// 真实浏览器 Math.tan/sin/cos(-1e300) 仅末位 1-2 位有微小差异
+	tanEnds := []string{"45", "46", "47", "48", "43", "44"}
+	sinEnds := []string{"85", "86", "84", "87", "83"}
+	tan = "-1.42144882387472" + tanEnds[rand.Intn(len(tanEnds))]
+	sin = "0.81788191211590" + sinEnds[rand.Intn(len(sinEnds))]
 
 	// cos 有两个家族, 家族A 更常见 (~70%)
 	if rand.Intn(10) < 7 {
-		cosEnd := 89 + rand.Intn(15) // 更大范围
-		cos = fmt.Sprintf("-0.5753861119575%03d", cosEnd)
+		cosAEnds := []string{"91", "90", "89", "92", "93"}
+		cos = "-0.57538611195754" + cosAEnds[rand.Intn(len(cosAEnds))]
 	} else {
-		cosEnd := 53 + rand.Intn(10)
-		cos = fmt.Sprintf("-0.5765775004286%03d", cosEnd)
+		cosBEnds := []string{"54", "53", "55", "52"}
+		cos = "-0.57657750042868" + cosBEnds[rand.Intn(len(cosBEnds))]
 	}
 	return
 }
@@ -343,29 +244,126 @@ func abs(x int) int {
 	return x
 }
 
+// ──────────────────── 硬件档位: 保证参数关联合理 ────────────────────
+
+// hardwareProfile 定义一组关联的硬件参数
+type hardwareProfile struct {
+	memoryOptions []int
+	coreOptions   []int
+	gpuTier       string // "low", "mid", "high"
+	screenTier    string // "low", "mid", "high"
+}
+
+// 真实世界的硬件档位组合
+var hwProfiles = []hardwareProfile{
+	// 中端办公机 (最常见)
+	{memoryOptions: []int{8, 16}, coreOptions: []int{4, 6, 8}, gpuTier: "mid", screenTier: "mid"},
+	// 中高端工作站
+	{memoryOptions: []int{16, 32}, coreOptions: []int{8, 12, 16}, gpuTier: "high", screenTier: "high"},
+	// 轻薄本/入门机
+	{memoryOptions: []int{8, 16}, coreOptions: []int{4, 8}, gpuTier: "low", screenTier: "mid"},
+	// 高端游戏/开发机
+	{memoryOptions: []int{32, 64}, coreOptions: []int{12, 16, 24}, gpuTier: "high", screenTier: "high"},
+	// 普通家用机
+	{memoryOptions: []int{8, 16}, coreOptions: []int{4, 6, 8}, gpuTier: "mid", screenTier: "mid"},
+}
+
+func genGPUByTier(tier string) (vendor, model string) {
+	type gpuEntry struct {
+		chipVendor string
+		prefix     string
+		model      string
+	}
+
+	lowGPUs := []gpuEntry{
+		{"Intel", "Intel(R) ", "UHD Graphics 630"},
+		{"Intel", "Intel(R) ", "UHD Graphics 730"},
+		{"Intel", "Intel(R) ", "Iris(R) Xe Graphics"},
+		{"Intel", "Intel(R) ", "UHD Graphics 620"},
+		{"Intel", "Intel(R) ", "Iris(R) Plus Graphics"},
+	}
+	midGPUs := []gpuEntry{
+		{"NVIDIA", "NVIDIA ", "GeForce GTX 1650"},
+		{"NVIDIA", "NVIDIA ", "GeForce GTX 1660 Super"},
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 3060"},
+		{"AMD", "AMD ", "Radeon RX 580"},
+		{"AMD", "AMD ", "Radeon RX 5600 XT"},
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 2060"},
+	}
+	highGPUs := []gpuEntry{
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 3070"},
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 3080"},
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 4060"},
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 4070"},
+		{"NVIDIA", "NVIDIA ", "GeForce RTX 4080"},
+		{"AMD", "AMD ", "Radeon RX 6800 XT"},
+		{"AMD", "AMD ", "Radeon RX 7800 XT"},
+	}
+
+	var pool []gpuEntry
+	switch tier {
+	case "low":
+		pool = lowGPUs
+	case "high":
+		pool = highGPUs
+	default:
+		pool = midGPUs
+	}
+
+	g := pool[rand.Intn(len(pool))]
+	vendor = fmt.Sprintf("Google Inc. (%s)", g.chipVendor)
+	model = fmt.Sprintf("ANGLE (%s, %s%s Direct3D11 vs_5_0 ps_5_0, D3D11)", g.chipVendor, g.prefix, g.model)
+	return
+}
+
+func genScreenByTier(tier string) ScreenInfo {
+	type resolution struct{ w, h int }
+
+	lowRes := []resolution{{1920, 1080}, {1600, 900}, {1536, 864}}
+	midRes := []resolution{{1920, 1080}, {2560, 1440}, {1920, 1200}}
+	highRes := []resolution{{2560, 1440}, {3840, 2160}, {3440, 1440}, {2560, 1600}}
+
+	var pool []resolution
+	switch tier {
+	case "low":
+		pool = lowRes
+	case "high":
+		pool = highRes
+	default:
+		pool = midRes
+	}
+
+	res := pool[rand.Intn(len(pool))]
+	taskbar := 40 // Windows 标准任务栏高度
+
+	return ScreenInfo{
+		Width:       res.w,
+		Height:      res.h,
+		AvailWidth:  res.w,
+		AvailHeight: res.h - taskbar,
+		ColorDepth:  24,
+	}
+}
+
 // ──────────────────── 核心: 随机身份生成 ────────────────────
 
-// RandomIdentity 创建随机浏览器身份 (纯算法生成, 无硬编码数据)
+// RandomIdentity 创建随机浏览器身份 (硬件参数关联合理)
 func RandomIdentity() *BrowserIdentity {
 	// Chrome 版本
 	cv := genChromeVersion()
 
-	// GPU (算法生成)
-	gpuVendor, gpuModel := genGPU()
+	// 选择硬件档位，保证参数关联
+	profile := hwProfiles[rand.Intn(len(hwProfiles))]
+	deviceMemory := profile.memoryOptions[rand.Intn(len(profile.memoryOptions))]
+	hardwareConcurrency := profile.coreOptions[rand.Intn(len(profile.coreOptions))]
 
-	// Screen (算法生成)
-	screen := genScreen()
-
-	// 硬件参数
-	memories := []int{2, 4, 6, 8, 12, 16, 24, 32, 64}
-	deviceMemory := memories[rand.Intn(len(memories))]
-
-	concurrencies := []int{2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32}
-	hardwareConcurrency := concurrencies[rand.Intn(len(concurrencies))]
+	// GPU 和屏幕与档位关联
+	gpuVendor, gpuModel := genGPUByTier(profile.gpuTier)
+	screen := genScreenByTier(profile.screenTier)
 
 	platform := "Win32"
 
-	// Math 精度 (算法生成)
+	// Math 精度 (真实值微小变化)
 	mathTan, mathSin, mathCos := genMath()
 
 	// Canvas 数据 (算法模拟)
@@ -374,8 +372,8 @@ func RandomIdentity() *BrowserIdentity {
 	// WebGL 扩展
 	exts := make([]string, len(webglExtCore))
 	copy(exts, webglExtCore)
-	nOpt := rand.Intn(5)
-	if nOpt > 0 && nOpt <= len(webglExtOptional) {
+	nOpt := 1 + rand.Intn(4) // 至少 1 个可选扩展
+	if nOpt <= len(webglExtOptional) {
 		perm := rand.Perm(len(webglExtOptional))
 		for i := 0; i < nOpt; i++ {
 			exts = append(exts, webglExtOptional[perm[i]])
@@ -387,6 +385,10 @@ func RandomIdentity() *BrowserIdentity {
 	plugins := make([]map[string]string, len(pluginsPool))
 	copy(plugins, pluginsPool)
 	rand.Shuffle(len(plugins), func(i, j int) { plugins[i], plugins[j] = plugins[j], plugins[i] })
+
+	// 美区时区: -5(EST), -6(CST), -7(MST), -8(PST)
+	usTimezones := []int{-5, -6, -7, -8}
+	timeZone := usTimezones[rand.Intn(len(usTimezones))]
 
 	ua := fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Safari/537.36", cv.Version)
 
@@ -407,6 +409,7 @@ func RandomIdentity() *BrowserIdentity {
 		DeviceMemory:        deviceMemory,
 		HardwareConcurrency: hardwareConcurrency,
 		Platform:            platform,
+		TimeZone:            timeZone,
 		LsubidPrefixSignin:  lsubidPrefixes[rand.Intn(len(lsubidPrefixes))],
 		LsubidPrefixProfile: lsubidPrefixes[rand.Intn(len(lsubidPrefixes))],
 		WebpackHash:         fmt.Sprintf("%x", rand.Int63())[:10],

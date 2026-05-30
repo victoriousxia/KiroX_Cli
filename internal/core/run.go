@@ -125,6 +125,11 @@ func (r *Registrar) Run() map[string]interface{} {
 		return map[string]interface{}{"status": "failed", "error": err.Error(), "email": r.Email}
 	}
 
+	// 模拟用户首次打开 IDE 的延迟（注册完到实际使用有一段间隔）
+	verifyDelay := time.Duration(8000+rand.Intn(7001)) * time.Millisecond
+	log.Printf("[延迟] 模拟 IDE 启动 %.1f 秒...", verifyDelay.Seconds())
+	time.Sleep(verifyDelay)
+
 	verify := r.VerifyAlive(awsToken)
 	if suspended, _ := verify["suspended"].(bool); suspended {
 		log.Println("注册失败! 账号已被封禁 (suspended)")

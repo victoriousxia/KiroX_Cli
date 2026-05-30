@@ -341,7 +341,8 @@ func BuildFingerprintData(
 		},
 	})
 	result.Set("end", endMs)
-	result.Set("timeZone", 8)
+	// 使用身份中固定的时区，保证同一会话一致
+	result.Set("timeZone", identity.TimeZone)
 	result.Set("flashVersion", nil)
 	result.Set("plugins", pluginsStr+" ||"+screenStr)
 	result.Set("dupedPlugins", pluginsStr+" ||"+screenStr)

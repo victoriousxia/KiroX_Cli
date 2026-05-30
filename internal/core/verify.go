@@ -33,7 +33,7 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 	req, _ := fhttp.NewRequest("GET", url, nil)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+access)
-	req.Header.Set("User-Agent", "aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#20.16.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-0.6.18")
+	req.Header.Set("User-Agent", "aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#22.12.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-1.0.6")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -167,7 +167,7 @@ func queryEndpointStandalone(client interface{ Do(req *fhttp.Request) (*fhttp.Re
 
 // VerifyAccount 独立验证函数，不依赖 Registrar 实例
 func VerifyAccount(clientID, clientSecret, refreshToken, proxy string) VerifyAccountResult {
-	client := httputil.NewTLSClient(proxy, true, "144.0.0.0")
+	client := httputil.NewTLSClient(proxy, true, "137.0.0.0")
 
 	tokenBody, _ := json.Marshal(map[string]string{
 		"clientId":     clientID,

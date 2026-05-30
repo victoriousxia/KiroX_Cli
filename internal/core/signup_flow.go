@@ -189,7 +189,7 @@ func (r *Registrar) Step7_8ProfileInit() error {
 	log.Println("[7.8] Profile 页面初始化")
 	r.Ubid = httputil.UbidGen()
 	r.Cookies["aws-user-profile-ubid"] = r.Ubid
-	r.Cookies["i18next"] = "zh-CN"
+	r.Cookies["i18next"] = "en-US"
 	if _, ok := r.Cookies["awsccc"]; !ok {
 		r.Cookies["awsccc"] = httputil.Awsccc()
 	}
