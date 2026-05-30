@@ -105,6 +105,11 @@ func (r *Registrar) Run() map[string]interface{} {
 	// 注册完成后等待一段时间再验活，模拟真人行为
 	time.Sleep(time.Duration(5000+rand.Intn(5001)) * time.Millisecond)
 
+	// 调用 Kiro Web Portal InitiateLogin（授予订阅管理权限）
+	if err := r.StepKiroPortalLogin(); err != nil {
+		log.Printf("Kiro Portal 登录失败: %v (继续)", err)
+	}
+
 	awsToken, err := r.Step13SSOToken()
 	if err != nil {
 		log.Printf("注册失败: %v", err)
