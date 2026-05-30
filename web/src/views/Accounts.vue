@@ -90,6 +90,7 @@
         <el-divider />
         <div class="copy-all-section">
           <el-button type="primary" @click="copyAll">一键复制全部信息</el-button>
+          <el-button :icon="Download" @click="exportSingle">导出 JSON</el-button>
           <el-button
             type="warning"
             @click="handleSubscribe"
@@ -108,6 +109,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getAccounts, subscribeAccount, type Account } from '../api'
 import { ElMessage } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 
 const accounts = ref<Account[]>([])
 const searchText = ref('')
@@ -168,9 +170,20 @@ function copyAll() {
   if (acc.emailJwt) {
     lines.push(`邮箱JWT: ${acc.emailJwt}`)
   }
-  lines.push(`订阅: ${acc.subscription || '-'}`)
-  lines.push(`额度: ${acc.creditUsed} / ${acc.creditLimit}`)
   copyText(lines.join('\n'))
+}
+
+function exportSingle() {
+  if (!selectedAccount.value) return
+  const acc = selectedAccount.value
+  const data = JSON.stringify(acc, null, 2)
+  const blob = new Blob([data], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${acc.email}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 async function loadAccounts() {
