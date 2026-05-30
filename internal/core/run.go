@@ -10,6 +10,7 @@ import (
 
 // Run 执行完整注册流程
 func (r *Registrar) Run() map[string]interface{} {
+	log.Printf("[代理] 当前使用代理: %s", r.Cfg.Proxy)
 	crypto.RefreshAppJSConfig(r.Cfg.Proxy)
 
 	steps := []struct {
@@ -152,10 +153,14 @@ func (r *Registrar) Run() map[string]interface{} {
 
 // humanDelay 模拟人类操作延迟 (1.5-4秒)
 func humanDelay() {
-	time.Sleep(time.Duration(1500+rand.Intn(2501)) * time.Millisecond)
+	d := time.Duration(1500+rand.Intn(2501)) * time.Millisecond
+	log.Printf("[延迟] 等待 %.1f..", d.Seconds())
+	time.Sleep(d)
 }
 
 // longHumanDelay 模拟较长的人类思考延迟 (3-7秒)
 func longHumanDelay() {
-	time.Sleep(time.Duration(3000+rand.Intn(4001)) * time.Millisecond)
+	d := time.Duration(3000+rand.Intn(4001)) * time.Millisecond
+	log.Printf("[延迟] 长等待 %.1f 秒...", d.Seconds())
+	time.Sleep(d)
 }
