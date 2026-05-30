@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strings"
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	httputil "reg_go/internal/http"
 )
 
-const kiroUA = "aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#22.12.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-1.0.6"
+// Q Developer 公共 profileArn（所有 Builder ID 用户共用）
+const qProfileArn = "arn%3Aaws%3Acodewhisperer%3Aus-east-1%3A638616132270%3Aprofile%2FAAAACCCCXXXX"
+
+// 真实 Kiro IDE User-Agent
+const kiroUA = "aws-sdk-js/1.0.0 ua/2.1 os/windows lang/js md/nodejs#22.22.0 api/codewhispererruntime#1.0.0 m/N,E KiroIDE-0.12.263"
+const kiroXAmzUA = "aws-sdk-js/1.0.0 KiroIDE-0.12.263"
 
 type endpointResult struct {
 	body      []byte
@@ -37,6 +41,9 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+access)
 	req.Header.Set("User-Agent", kiroUA)
+	req.Header.Set("x-amz-user-agent", kiroXAmzUA)
+	req.Header.Set("amz-sdk-request", "attempt=1; max=1")
+	req.Header.Set("amz-sdk-invocation-id", NewUUID())
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -46,112 +53,6 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	return checkEndpointResponse(url, resp.StatusCode, body)
-}
-
-// ActivateProfile 激活 Kiro/Q Developer 免费订阅 (CreateProfile)
-// 新注册的 Builder ID 需要调用此接口创建 profileArn 才能使用 Q API
-func (r *Registrar) ActivateProfile(awsToken, kiroTokens map[string]interface{}) error {
-	log.Println("[激活] 创建 Q Developer Profile")
-	client := httputil.NewTLSClient(r.Cfg.Proxy, true, r.Identity.ChromeVer)
-
-	kiroRefresh, _ := kiroTokens["refreshToken"].(string)
-	awsRefresh, _ := awsToken["refreshToken"].(string)
-
-	// 方案1: 用 Kiro 客户端凭证刷新 token，再调 CreateProfile
-	// (CreateProfile 对 Step 1 token 返回 403，可能需要 Kiro 客户端的 token)
-	if r.KiroClientID != "" && r.KiroClientSecret != "" && kiroRefresh != "" {
-		log.Println("[激活] 尝试用 Kiro 客户端刷新 token")
-		tokenBody, _ := json.Marshal(map[string]string{
-			"clientId":     r.KiroClientID,
-			"clientSecret": r.KiroClientSecret,
-			"refreshToken": kiroRefresh,
-			"grantType":    "refresh_token",
-		})
-		req, _ := fhttp.NewRequest("POST", r.Cfg.OIDCBase+"/token",
-			bytes.NewReader(tokenBody))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
-		if err == nil {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				var tok map[string]interface{}
-				json.Unmarshal(body, &tok)
-				if at, ok := tok["accessToken"].(string); ok && at != "" {
-					log.Println("[激活] Kiro token 刷新成功，尝试 CreateProfile")
-					if r.tryCreateProfile(client, at) == nil {
-						return nil
-					}
-				}
-			} else {
-				log.Printf("[激活] Kiro token 刷新失败: %d %s", resp.StatusCode, string(body))
-			}
-		}
-	}
-
-	// 方案2: 用 Step 1 客户端刷新 AWS token 再试
-	if awsRefresh != "" {
-		log.Println("[激活] 尝试用 Step 1 客户端刷新 token")
-		tokenBody, _ := json.Marshal(map[string]string{
-			"clientId":     r.ClientID,
-			"clientSecret": r.ClientSecret,
-			"refreshToken": awsRefresh,
-			"grantType":    "refresh_token",
-		})
-		req, _ := fhttp.NewRequest("POST", "https://oidc.us-east-1.amazonaws.com/token",
-			bytes.NewReader(tokenBody))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
-		if err == nil {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				var tok map[string]interface{}
-				json.Unmarshal(body, &tok)
-				if at, ok := tok["accessToken"].(string); ok && at != "" {
-					if r.tryCreateProfile(client, at) == nil {
-						return nil
-					}
-				}
-			}
-		}
-	}
-
-	return fmt.Errorf("CreateProfile 失败，需要抓包确认真实激活流程")
-}
-
-// tryCreateProfile 尝试调用 CreateProfile 端点
-func (r *Registrar) tryCreateProfile(client interface{ Do(req *fhttp.Request) (*fhttp.Response, error) }, accessToken string) error {
-	req, _ := fhttp.NewRequest("POST", "https://q.us-east-1.amazonaws.com/CreateProfile",
-		bytes.NewReader([]byte("{}")))
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("User-Agent", kiroUA)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[激活] CreateProfile 请求失败: %v", err)
-		return err
-	}
-	respBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	bodyStr := string(respBody)
-	log.Printf("[激活] CreateProfile → %d %s", resp.StatusCode, bodyStr)
-
-	// 检查是否真正成功（排除 Coral UnknownOperationException 假 200）
-	if (resp.StatusCode == 200 || resp.StatusCode == 201) &&
-		!strings.Contains(bodyStr, "UnknownOperationException") {
-		log.Println("Profile 激活成功!")
-		return nil
-	}
-	if resp.StatusCode == 409 {
-		log.Println("Profile 已存在")
-		return nil
-	}
-
-	return fmt.Errorf("CreateProfile 返回 %d", resp.StatusCode)
 }
 
 // VerifyAlive 验活: 刷新 Token + 查用量 + 查模型
@@ -190,23 +91,26 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 	log.Printf("Token 刷新成功, expiresIn=%ds", int(expiresIn))
 
 	endpoints := []string{
-		"https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST&isEmailRequired=true",
-		"https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR",
+		"https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&profileArn=" + qProfileArn + "&resourceType=AGENTIC_REQUEST&isEmailRequired=true",
+		"https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR&profileArn=" + qProfileArn,
 	}
 
-	for _, ep := range endpoints {
+	var usageRes endpointResult
+	for i, ep := range endpoints {
 		res := queryGetEndpoint(client, access, ep)
 		if res.suspended {
 			return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
 		}
+		if i == 0 {
+			usageRes = res
+		}
 	}
 
-	res := queryGetEndpoint(client, access, endpoints[0])
-	if !res.ok {
+	if !usageRes.ok {
 		return map[string]interface{}{"alive": false, "error": "usage query failed"}
 	}
 
-	return r.parseUsage(res.body)
+	return r.parseUsage(usageRes.body)
 }
 
 func (r *Registrar) parseUsage(body []byte) map[string]interface{} {
@@ -303,8 +207,8 @@ func VerifyAccount(clientID, clientSecret, refreshToken, proxy string) VerifyAcc
 	access, _ := tok["accessToken"].(string)
 
 	endpoints := []string{
-		"https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST&isEmailRequired=true",
-		"https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR",
+		"https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&profileArn=" + qProfileArn + "&resourceType=AGENTIC_REQUEST&isEmailRequired=true",
+		"https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR&profileArn=" + qProfileArn,
 	}
 
 	for _, ep := range endpoints {
