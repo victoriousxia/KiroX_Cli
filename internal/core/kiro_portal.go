@@ -30,7 +30,7 @@ func (r *Registrar) StepKiroPortalLogin() error {
 	// 构造 CBOR body
 	payload := map[string]interface{}{
 		"idp":                 "BuilderId",
-		"redirectUrl":         redirectURL,
+		"redirectUri":         redirectURL,
 		"state":               state,
 		"codeChallenge":       challenge,
 		"codeChallengeMethod": "S256",
