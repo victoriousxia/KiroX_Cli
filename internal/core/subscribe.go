@@ -83,10 +83,13 @@ func CreateSubscriptionToken(clientID, clientSecret, refreshToken, proxy, subscr
 	// 提取 checkout URL
 	checkoutURL, _ := result["checkoutUrl"].(string)
 	if checkoutURL == "" {
+		checkoutURL, _ = result["encodedVerificationUrl"].(string)
+	}
+	if checkoutURL == "" {
 		checkoutURL, _ = result["url"].(string)
-		if checkoutURL == "" {
-			checkoutURL, _ = result["redirectUrl"].(string)
-		}
+	}
+	if checkoutURL == "" {
+		checkoutURL, _ = result["redirectUrl"].(string)
 	}
 
 	if checkoutURL == "" {
