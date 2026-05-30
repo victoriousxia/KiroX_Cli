@@ -130,6 +130,11 @@ func (r *Registrar) Run() map[string]interface{} {
 	log.Printf("[延迟] 模拟 IDE 启动 %.1f 秒...", verifyDelay.Seconds())
 	time.Sleep(verifyDelay)
 
+	// 激活 Q Developer Profile（新账号必须先 CreateProfile 才能调用 Q API）
+	if err := r.ActivateProfile(kiroTokens); err != nil {
+		log.Printf("Profile 激活失败: %v (继续验活)", err)
+	}
+
 	verify := r.VerifyAlive(awsToken)
 	if suspended, _ := verify["suspended"].(bool); suspended {
 		log.Println("注册失败! 账号已被封禁 (suspended)")

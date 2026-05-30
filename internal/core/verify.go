@@ -11,6 +11,8 @@ import (
 	httputil "reg_go/internal/http"
 )
 
+const kiroUA = "aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#22.12.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-1.0.6"
+
 type endpointResult struct {
 	body      []byte
 	ok        bool
@@ -33,7 +35,7 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 	req, _ := fhttp.NewRequest("GET", url, nil)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+access)
-	req.Header.Set("User-Agent", "aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#22.12.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-1.0.6")
+	req.Header.Set("User-Agent", kiroUA)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -43,6 +45,48 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	return checkEndpointResponse(url, resp.StatusCode, body)
+}
+
+// ActivateProfile 激活 Kiro/Q Developer 免费订阅 (CreateProfile)
+// 新注册的 Builder ID 需要调用此接口创建 profileArn 才能使用 Q API
+func (r *Registrar) ActivateProfile(kiroTokens map[string]interface{}) error {
+	log.Println("[激活] 创建 Q Developer Profile")
+	client := httputil.NewTLSClient(r.Cfg.Proxy, true, r.Identity.ChromeVer)
+
+	accessToken, _ := kiroTokens["accessToken"].(string)
+	if accessToken == "" {
+		return fmt.Errorf("无 Kiro accessToken")
+	}
+
+	// 调用 CreateProfile 激活免费订阅
+	payload, _ := json.Marshal(map[string]interface{}{})
+	req, _ := fhttp.NewRequest("POST", "https://q.us-east-1.amazonaws.com/CreateProfile",
+		bytes.NewReader(payload))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", kiroUA)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("CreateProfile 请求失败: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode == 200 || resp.StatusCode == 201 {
+		log.Printf("Profile 激活成功 (%d)", resp.StatusCode)
+		return nil
+	}
+
+	// 409 表示 profile 已存在，也算成功
+	if resp.StatusCode == 409 {
+		log.Println("Profile 已存在 (409)")
+		return nil
+	}
+
+	log.Printf("CreateProfile 响应: %d %s", resp.StatusCode, string(body))
+	return fmt.Errorf("CreateProfile 失败: %d", resp.StatusCode)
 }
 
 // VerifyAlive 验活: 刷新 Token + 查用量 + 查模型
