@@ -146,6 +146,7 @@ export interface SubscribeInput {
   clientId: string
   clientSecret: string
   refreshToken: string
+  email?: string
   proxy?: string
   subscriptionType?: string
 }

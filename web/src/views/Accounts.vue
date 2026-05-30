@@ -206,12 +206,20 @@ async function handleSubscribe() {
       clientId: selectedAccount.value.clientId,
       clientSecret: selectedAccount.value.clientSecret,
       refreshToken: selectedAccount.value.refreshToken,
+      email: selectedAccount.value.email,
     })
     window.open(checkoutUrl, '_blank')
     ElMessage.success('已打开支付页面')
   } catch (e: any) {
-    const msg = e?.response?.data?.error || e?.message || '获取支付链接失败'
-    ElMessage.error(msg)
+    const resp = e?.response?.data
+    if (resp?.removed) {
+      ElMessage.warning(`账号 ${resp.email} 无订阅权限，已从列表移除`)
+      detailVisible.value = false
+      await loadAccounts()
+    } else {
+      const msg = resp?.error || e?.message || '获取支付链接失败'
+      ElMessage.error(msg)
+    }
   } finally {
     subscribing.value = false
   }

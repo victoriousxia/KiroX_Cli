@@ -548,3 +548,38 @@ func (tm *TaskManager) removeAccountFromCSV(csvPath, emailAddr string) {
 		fmt.Fprintf(os.Stderr, "[removeCSV] 写入失败: %v\n", err)
 	}
 }
+
+// RemoveAccount 从 results.json 中永久移除指定邮箱的账号
+func (tm *TaskManager) RemoveAccount(emailAddr, dataDir string) {
+	tm.fileMu.Lock()
+	defer tm.fileMu.Unlock()
+
+	path := dataDir + "/results.json"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var results []map[string]interface{}
+	if json.Unmarshal(data, &results) != nil {
+		return
+	}
+
+	filtered := make([]map[string]interface{}, 0)
+	for _, r := range results {
+		if em, ok := r["email"].(string); ok && em == emailAddr {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+
+	b, err := json.MarshalIndent(filtered, "", "  ")
+	if err != nil {
+		log.Printf("[账号移除] JSON 序列化失败: %v", err)
+		return
+	}
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		log.Printf("[账号移除] 写入失败: %v", err)
+		return
+	}
+	log.Printf("[账号移除] %s 已从账号列表永久移除 (无订阅权限)", emailAddr)
+}

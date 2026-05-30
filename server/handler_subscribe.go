@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"reg_go/internal/core"
@@ -14,11 +15,12 @@ type SubscribeRequest struct {
 	ClientID         string `json:"clientId" binding:"required"`
 	ClientSecret     string `json:"clientSecret" binding:"required"`
 	RefreshToken     string `json:"refreshToken" binding:"required"`
+	Email            string `json:"email"`
 	Proxy            string `json:"proxy"`
 	SubscriptionType string `json:"subscriptionType"`
 }
 
-func HandleSubscribe(dataDir string) gin.HandlerFunc {
+func HandleSubscribe(tm *TaskManager, dataDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -41,6 +43,18 @@ func HandleSubscribe(dataDir string) gin.HandlerFunc {
 			req.ClientID, req.ClientSecret, req.RefreshToken, proxy, req.SubscriptionType,
 		)
 		if err != nil {
+			// 如果是 403 "not authorized"，自动从账号列表中移除该账号
+			if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "not authorized") {
+				if req.Email != "" {
+					tm.RemoveAccount(req.Email, dataDir)
+				}
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":   err.Error(),
+					"removed": true,
+					"email":   req.Email,
+				})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
